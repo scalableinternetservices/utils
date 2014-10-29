@@ -9,8 +9,23 @@
 
 from __future__ import print_function
 from docopt import docopt
+import copy
+import json
 import os
+import random
+import string
 import sys
+
+
+EC2_REGION = 'us-west-2'
+AWS_POLICY = {'Statement':
+              [{'Action': ['ec2:CreateTags', 'ec2:DescribeAvailabilityZones',
+                           'ec2:DescribeImages', 'ec2:DescribeInstances',
+                           'ec2:DescribeKeyPairs',
+                           'ec2:DescribeSecurityGroups', 'ec2:DescribeSubnets',
+                           'ec2:DescribeTags', 'ec2:DescribeVPCs'],
+                'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
+                'Effect': 'Allow', 'Resource': '*'}]}
 
 
 def configure_aws(team_name, full_access_profile='admin'):
@@ -24,18 +39,46 @@ def configure_aws(team_name, full_access_profile='admin'):
         code, data = serv[0].get_operation(operation).call(serv[1], **kwargs)
         if code.status_code == 200:
             print('Success: {0} {1}'.format(operation, kwargs))
+            return data
         else:
             print(data['Error']['Message'])
+            return False
+
+    def operation_list(service_name):
+        """Output the available API commands and exit."""
+        import pprint
+        pprint.pprint(service_name[0].operations)
+        sys.exit(1)
 
     import botocore.session
     aws = botocore.session.get_session()
     aws.profile = full_access_profile
-    ec2 = get_service('ec2', 'us-west-2')
+    ec2 = get_service('ec2', EC2_REGION)
     iam = get_service('iam', None)
 
-    op(iam, 'CreateUser', UserName=team_name)
+    # operation_list(ec2)
+    # operation_list(iam)
+
+    # Configure user account / password / access keys / keypair
+    if op(iam, 'CreateUser', UserName=team_name):
+        op(iam, 'CreateLoginProfile', UserName=team_name,
+           Password=generate_password())
+        data = op(iam, 'CreateAccessKey', UserName=team_name)
+        if data:
+            print('AccessKey: {0}'.format(data['AccessKey']['AccessKeyId']))
+            print('SecretKey: {0}'
+                  .format(data['AccessKey']['SecretAccessKey']))
+        data = op(ec2, 'CreateKeyPair', KeyName=team_name)
+        if data:
+            with open('{0}.pem'.format(team_name), 'w') as fd:
+                fd.write(data['KeyMaterial'])
+            print('Keypair saved as: {0}.pem'.format(team_name))
+
+    # Configure security group
     op(ec2, 'CreateSecurityGroup', GroupName=team_name, Description=team_name)
-    for port in [22, 80, 443]:  # Open standard ports
+    for port in [22, 80, 443]:  # Open standard ports to all addresses.
+        # These are run one at a time so that existance of one doesn't prevent
+        # the creation of the others.
         rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
         op(ec2, 'AuthorizeSecurityGroupIngress', GroupName=team_name,
@@ -44,6 +87,16 @@ def configure_aws(team_name, full_access_profile='admin'):
     op(ec2, 'AuthorizeSecurityGroupIngress', GroupName=team_name,
        IpPermissions=[{'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
                        'UserIdGroupPairs': [{'GroupName': team_name}]}])
+
+    # Configure the user's AWS policy.
+    policy = copy.deepcopy(AWS_POLICY)
+    policy['Statement'].append(
+        {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
+                    'ec2:StopInstances', 'ec2:TerminateInstances'],
+         'Condition': {'StringEquals': {'ec2:ResourceTag/team': team_name}},
+         'Effect': 'Allow', 'Resource': '*'})
+    op(iam, 'PutUserPolicy', UserName=team_name, PolicyName=team_name,
+       PolicyDocument=json.dumps(policy))
 
     return 0
 
@@ -92,6 +145,11 @@ def configure_github_team(team_name, user_names):
         print(team.invite(user))
 
     return 0
+
+
+def generate_password(length=16):
+    ALPHA = string.ascii_letters + string.digits
+    return ''.join(random.choice(ALPHA) for _ in range(length))
 
 
 def get_github_token():
