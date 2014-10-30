@@ -2,6 +2,7 @@
 
 """Usage:
   cs290_utils aws TEAM
+  cs290_utils aws-purge TEAM
   cs290_utils gh TEAM USER...
 
 -h --help  show this message
@@ -9,6 +10,7 @@
 
 from __future__ import print_function
 from docopt import docopt
+import botocore.session
 import copy
 import json
 import os
@@ -17,23 +19,37 @@ import string
 import sys
 
 
-EC2_REGION = 'us-west-2'
-AWS_POLICY = {'Statement':
-              [{'Action': ['ec2:CreateTags', 'ec2:DescribeAvailabilityZones',
-                           'ec2:DescribeImages', 'ec2:DescribeInstances',
-                           'ec2:DescribeKeyPairs',
-                           'ec2:DescribeSecurityGroups', 'ec2:DescribeSubnets',
-                           'ec2:DescribeTags', 'ec2:DescribeVPCs'],
-                'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
-                'Effect': 'Allow', 'Resource': '*'}]}
+class AWS(object):
+    EC2_REGION = 'us-west-2'
+    EC2_ARN = 'arn:aws:ec2:{0}:*:{{0}}'.format(EC2_REGION)
+    CF_ARN = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(EC2_REGION)
+    PROFILE = 'admin'
+    AWS_POLICY = {'Statement':
+                  [{'Action': ['cloudformation:CreateStack',
+                               'cloudformation:CreateUploadBucket',
+                               'cloudformation:DescribeStackEvents',
+                               'cloudformation:DescribeStacks',
+                               'cloudformation:GetStackPolicy',
+                               'cloudformation:GetTemplate',
+                               'cloudformation:ListStackResources',
+                               'cloudformation:ListStacks',
+                               'cloudformation:ValidateTemplate'],
+                    'Effect': 'Allow', 'Resource': '*'},
+                   {'Action': ['ec2:DescribeAvailabilityZones',
+                               'ec2:DescribeImages', 'ec2:DescribeInstances',
+                               'ec2:DescribeKeyPairs',
+                               'ec2:DescribeSecurityGroups',
+                               'ec2:DescribeSubnets', 'ec2:DescribeTags',
+                               'ec2:DescribeVPCs'],
+                    'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
+                    'Effect': 'Allow', 'Resource': '*'},
+                   # Following needed to access cloudformation configurations.
+                   {'Action': ['s3:GetBucketLocation', 's3:GetObject',
+                               's3:PutObject',
+                               'sts:DecodeAuthorizationMessage'],
+                    'Effect': 'Allow', 'Resource': '*'}]}
 
-
-def configure_aws(team_name, full_access_profile='admin'):
-    def get_service(service_name, endpoint_name):
-        """Return a tuple containing the service and associated endpoint."""
-        service = aws.get_service(service_name)
-        return service, service.get_endpoint(endpoint_name)
-
+    @staticmethod
     def op(serv, operation, **kwargs):
         """Execute an AWS operation and check the response status."""
         code, data = serv[0].get_operation(operation).call(serv[1], **kwargs)
@@ -44,61 +60,102 @@ def configure_aws(team_name, full_access_profile='admin'):
             print(data['Error']['Message'])
             return False
 
+    @staticmethod
     def operation_list(service_name):
         """Output the available API commands and exit."""
         import pprint
         pprint.pprint(service_name[0].operations)
         sys.exit(1)
 
-    import botocore.session
-    aws = botocore.session.get_session()
-    aws.profile = full_access_profile
-    ec2 = get_service('ec2', EC2_REGION)
-    iam = get_service('iam', None)
+    def __init__(self, team):
+        self.aws = botocore.session.get_session()
+        self.aws.profile = self.PROFILE
+        self.team = team
+        self.ec2 = self.get_service('ec2', self.EC2_REGION)
+        self.iam = self.get_service('iam', None)
 
-    # operation_list(ec2)
-    # operation_list(iam)
+    def get_service(self, service_name, endpoint_name):
+        """Return a tuple containing the service and associated endpoint."""
+        service = self.aws.get_service(service_name)
+        return service, service.get_endpoint(endpoint_name)
 
-    # Configure user account / password / access keys / keypair
-    if op(iam, 'CreateUser', UserName=team_name):
-        op(iam, 'CreateLoginProfile', UserName=team_name,
-           Password=generate_password())
-        data = op(iam, 'CreateAccessKey', UserName=team_name)
-        if data:
-            print('AccessKey: {0}'.format(data['AccessKey']['AccessKeyId']))
-            print('SecretKey: {0}'
-                  .format(data['AccessKey']['SecretAccessKey']))
-        data = op(ec2, 'CreateKeyPair', KeyName=team_name)
-        if data:
-            with open('{0}.pem'.format(team_name), 'w') as fd:
-                fd.write(data['KeyMaterial'])
-            print('Keypair saved as: {0}.pem'.format(team_name))
+    def configure(self):
+        # operation_list(self.ec2)
+        # operation_list(self.iam)
 
-    # Configure security group
-    op(ec2, 'CreateSecurityGroup', GroupName=team_name, Description=team_name)
-    for port in [22, 80, 443]:  # Open standard ports to all addresses.
-        # These are run one at a time so that existance of one doesn't prevent
-        # the creation of the others.
-        rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
-        op(ec2, 'AuthorizeSecurityGroupIngress', GroupName=team_name,
-           IpPermissions=[rule])
-    # Permit all instances in the SecurityGroup to talk to each other
-    op(ec2, 'AuthorizeSecurityGroupIngress', GroupName=team_name,
-       IpPermissions=[{'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
-                       'UserIdGroupPairs': [{'GroupName': team_name}]}])
+        # Configure user account / password / access keys / keypair
+        if self.op(self.iam, 'CreateUser', UserName=self.team):
+            self.op(self.iam, 'CreateLoginProfile', UserName=self.team,
+                    Password=generate_password())
+            data = self.op(self.iam, 'CreateAccessKey', UserName=self.team)
+            if data:
+                print('AccessKey: {0}'
+                      .format(data['AccessKey']['AccessKeyId']))
+                print('SecretKey: {0}'
+                      .format(data['AccessKey']['SecretAccessKey']))
+            data = self.op(self.ec2, 'CreateKeyPair', KeyName=self.team)
+            if data:
+                with open('{0}.pem'.format(self.team), 'w') as fd:
+                    fd.write(data['KeyMaterial'])
+                print('Keypair saved as: {0}.pem'.format(self.team))
 
-    # Configure the user's AWS policy.
-    policy = copy.deepcopy(AWS_POLICY)
-    policy['Statement'].append(
-        {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
-                    'ec2:StopInstances', 'ec2:TerminateInstances'],
-         'Condition': {'StringEquals': {'ec2:ResourceTag/team': team_name}},
-         'Effect': 'Allow', 'Resource': '*'})
-    op(iam, 'PutUserPolicy', UserName=team_name, PolicyName=team_name,
-       PolicyDocument=json.dumps(policy))
+        # Configure security group
+        self.op(self.ec2, 'CreateSecurityGroup', GroupName=self.team,
+                Description=self.team)
+        for port in [22, 80, 443]:  # Open standard ports to all addresses.
+            # These are run one at a time so that existance of one doesn't
+            # prevent the creation of the others.
+            rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
+                    'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
+            self.op(self.ec2, 'AuthorizeSecurityGroupIngress',
+                    GroupName=self.team, IpPermissions=[rule])
+        # Permit all instances in the SecurityGroup to talk to each other
+        self.op(self.ec2, 'AuthorizeSecurityGroupIngress', GroupName=self.team,
+                IpPermissions=[
+                    {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
+                     'UserIdGroupPairs': [{'GroupName': self.team}]}])
 
-    return 0
+        # Configure the user's AWS policy.
+        policy = copy.deepcopy(self.AWS_POLICY)
+        policy['Statement'].append(
+            {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
+                        'ec2:StopInstances', 'ec2:TerminateInstances'],
+             # 'Condition': {
+             #     'StringEquals': {'ec2:ResourceTag/team': self.team}},
+             'Effect': 'Allow', 'Resource': self.EC2_ARN.format('instance/*')})
+        policy['Statement'].append(
+            {'Action': ['cloudformation:DeleteStack',
+                        'cloudformation:UpdateStack'],
+             'Effect': 'Allow',
+             'Resource': self.CF_ARN.format('stack/{0}*'.format(self.team))})
+        policy['Statement'].append(
+            {'Action': 'ec2:RunInstances',
+             'Effect': 'Allow',
+             'Resource': [self.EC2_ARN.format('image/*'),
+                          self.EC2_ARN.format('instance/*'),
+                          self.EC2_ARN.format('network-interface/*'),
+                          self.EC2_ARN.format('security-group/*'),
+                          self.EC2_ARN.format('subnet/*'),
+                          self.EC2_ARN.format('volume/*')]})
+
+        self.op(self.iam, 'PutUserPolicy', UserName=self.team,
+                PolicyName=self.team, PolicyDocument=json.dumps(policy))
+
+        return 0
+
+    def purge(self):
+        self.op(self.iam, 'DeleteLoginProfile', UserName=self.team)
+        self.op(self.iam, 'DeleteUserPolicy', UserName=self.team,
+                PolicyName=self.team)
+        resp = self.op(self.iam, 'ListAccessKeys', UserName=self.team)
+        if resp:
+            for keydata in resp['AccessKeyMetadata']:
+                self.op(self.iam, 'DeleteAccessKey', UserName=self.team,
+                        AccessKeyId=keydata['AccessKeyId'])
+        self.op(self.iam, 'DeleteUser', UserName=self.team)
+        self.op(self.ec2, 'DeleteKeyPair', KeyName=self.team)
+        self.op(self.ec2, 'DeleteSecurityGroup', GroupName=self.team)
+        return 0
 
 
 def configure_github_team(team_name, user_names):
@@ -199,7 +256,9 @@ def main():
     args = docopt(__doc__)
 
     if args['aws']:
-        return configure_aws(team_name=args['TEAM'])
+        return AWS(args['TEAM']).configure()
+    elif args['aws-purge']:
+        return AWS(args['TEAM']).purge()
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
