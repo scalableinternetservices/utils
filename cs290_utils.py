@@ -21,9 +21,8 @@ import sys
 
 class AWS(object):
     EC2_REGION = 'us-west-2'
-    EC2_ARN = 'arn:aws:ec2:{0}:*:{{0}}'.format(EC2_REGION)
-    CF_ARN = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(EC2_REGION)
-    PROFILE = 'admin'
+    ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(EC2_REGION)
+    ARNEC2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(EC2_REGION)
     AWS_POLICY = {'Statement':
                   [{'Action': ['cloudformation:CreateStack',
                                'cloudformation:CreateUploadBucket',
@@ -33,7 +32,12 @@ class AWS(object):
                                'cloudformation:GetTemplate',
                                'cloudformation:ListStackResources',
                                'cloudformation:ListStacks',
-                               'cloudformation:ValidateTemplate'],
+                               'cloudformation:ValidateTemplate',
+                               'cloudwatch:DescribeAlarms',
+                               'cloudwatch:GetMetricStatistics',
+                               's3:GetBucketLocation', 's3:GetObject',
+                               's3:PutObject',
+                               'sts:DecodeAuthorizationMessage'],
                     'Effect': 'Allow', 'Resource': '*'},
                    {'Action': ['ec2:DescribeAvailabilityZones',
                                'ec2:DescribeImages', 'ec2:DescribeInstances',
@@ -42,12 +46,8 @@ class AWS(object):
                                'ec2:DescribeSubnets', 'ec2:DescribeTags',
                                'ec2:DescribeVPCs'],
                     'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
-                    'Effect': 'Allow', 'Resource': '*'},
-                   # Following needed to access cloudformation configurations.
-                   {'Action': ['s3:GetBucketLocation', 's3:GetObject',
-                               's3:PutObject',
-                               'sts:DecodeAuthorizationMessage'],
                     'Effect': 'Allow', 'Resource': '*'}]}
+    PROFILE = 'admin'
 
     @staticmethod
     def op(serv, operation, **kwargs):
@@ -95,9 +95,11 @@ class AWS(object):
                       .format(data['AccessKey']['SecretAccessKey']))
             data = self.op(self.ec2, 'CreateKeyPair', KeyName=self.team)
             if data:
-                with open('{0}.pem'.format(self.team), 'w') as fd:
+                filename = '{0}.pem'.format(self.team)
+                with open(filename, 'w') as fd:
+                    os.chmod(filename, 0600)
                     fd.write(data['KeyMaterial'])
-                print('Keypair saved as: {0}.pem'.format(self.team))
+                print('Keypair saved as: {0}'.format(filename))
 
         # Configure security group
         self.op(self.ec2, 'CreateSecurityGroup', GroupName=self.team,
@@ -122,21 +124,22 @@ class AWS(object):
                         'ec2:StopInstances', 'ec2:TerminateInstances'],
              # 'Condition': {
              #     'StringEquals': {'ec2:ResourceTag/team': self.team}},
-             'Effect': 'Allow', 'Resource': self.EC2_ARN.format('instance/*')})
+             'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
         policy['Statement'].append(
             {'Action': ['cloudformation:DeleteStack',
                         'cloudformation:UpdateStack'],
              'Effect': 'Allow',
-             'Resource': self.CF_ARN.format('stack/{0}*'.format(self.team))})
+             'Resource': AWS.ARNCF.format('stack/{0}*'.format(self.team))})
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Effect': 'Allow',
-             'Resource': [self.EC2_ARN.format('image/*'),
-                          self.EC2_ARN.format('instance/*'),
-                          self.EC2_ARN.format('network-interface/*'),
-                          self.EC2_ARN.format('security-group/*'),
-                          self.EC2_ARN.format('subnet/*'),
-                          self.EC2_ARN.format('volume/*')]})
+             'Resource': [AWS.ARNEC2.format('image/*'),
+                          AWS.ARNEC2.format('instance/*'),
+                          AWS.ARNEC2.format('key-pair/{0}'.format(self.team)),
+                          AWS.ARNEC2.format('network-interface/*'),
+                          AWS.ARNEC2.format('security-group/*'),
+                          AWS.ARNEC2.format('subnet/*'),
+                          AWS.ARNEC2.format('volume/*')]})
 
         self.op(self.iam, 'PutUserPolicy', UserName=self.team,
                 PolicyName=self.team, PolicyDocument=json.dumps(policy))
