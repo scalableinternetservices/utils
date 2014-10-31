@@ -40,8 +40,9 @@ class AWS(object):
                                'sts:DecodeAuthorizationMessage'],
                     'Effect': 'Allow', 'Resource': '*'},
                    {'Action': ['ec2:DescribeAvailabilityZones',
-                               'ec2:DescribeImages', 'ec2:DescribeInstances',
-                               'ec2:DescribeKeyPairs',
+                               'ec2:DescribeImages',
+                               'ec2:DescribeInstanceStatus',
+                               'ec2:DescribeInstances', 'ec2:DescribeKeyPairs',
                                'ec2:DescribeSecurityGroups',
                                'ec2:DescribeSubnets', 'ec2:DescribeTags',
                                'ec2:DescribeVPCs'],
@@ -80,8 +81,8 @@ class AWS(object):
         return service, service.get_endpoint(endpoint_name)
 
     def configure(self):
-        # operation_list(self.ec2)
-        # operation_list(self.iam)
+        # self.operation_list(self.ec2)
+        # self.operation_list(self.iam)
 
         # Configure user account / password / access keys / keypair
         if self.op(self.iam, 'CreateUser', UserName=self.team):
