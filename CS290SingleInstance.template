@@ -17,7 +17,11 @@
             "Description": "WebServer EC2 instance type",
             "Type": "String"},
         "TeamName": {
-            "Description": "CS290 team name",
+            "AllowedValues": ["BaconWindshield", "Compete", "Gradr", "Lab-App",
+                              "labapp", "LaPlaya", "Motley-Crew", "picShare",
+                              "Suppr", "Team-Hytta", "Upvid", "Xup"],
+            "ConstraintDescription": "Must exactly match your team name as shown in your GitHub URL.",
+            "Description": "CS290 team name (the stack name must start with the team name)",
             "Type": "String"},
         "Branch": {
             "Default": "master",
