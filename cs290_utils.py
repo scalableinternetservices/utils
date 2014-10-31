@@ -137,12 +137,18 @@ class AWS(object):
             {'Action': 'ec2:RunInstances',
              'Effect': 'Allow',
              'Resource': [AWS.ARNEC2.format('image/*'),
-                          AWS.ARNEC2.format('instance/*'),
                           AWS.ARNEC2.format('key-pair/{0}'.format(self.team)),
                           AWS.ARNEC2.format('network-interface/*'),
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
                           AWS.ARNEC2.format('volume/*')]})
+        # Filter the instances types that are allowed to be started
+        policy['Statement'].append(
+            {'Action': 'ec2:RunInstances',
+             'Condition': {
+                 'StringLike': {'ec2:InstanceType': ['t1.micro', 'm1.small']}},
+             'Effect': 'Allow',
+             'Resource': AWS.ARNEC2.format('instance/*')})
 
         self.op(self.iam, 'PutUserPolicy', UserName=self.team,
                 PolicyName=self.team, PolicyDocument=json.dumps(policy))
