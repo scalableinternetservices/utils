@@ -123,8 +123,10 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
                         'ec2:StopInstances', 'ec2:TerminateInstances'],
-             # 'Condition': {
-             #     'StringEquals': {'ec2:ResourceTag/team': self.team}},
+             'Condition': {
+                 'StringLike': {
+                     'ec2:ResourceTag/aws:cloudformation:stack-name':
+                     '{0}*'.format(self.team)}},
              'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
         policy['Statement'].append(
             {'Action': ['cloudformation:DeleteStack',
@@ -258,6 +260,9 @@ def get_pivotaltracker_token():
 
 def main():
     args = docopt(__doc__)
+
+    if args['TEAM']:
+        args['TEAM'] = args['TEAM'].replace(' ', '-')
 
     if args['aws']:
         return AWS(args['TEAM']).configure()
