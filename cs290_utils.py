@@ -20,9 +20,12 @@ import sys
 
 
 class AWS(object):
+    EC2_INSTANCES = ['t1.micro', 'm1.small']
+    RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     EC2_REGION = 'us-west-2'
     ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(EC2_REGION)
     ARNEC2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(EC2_REGION)
+    ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(EC2_REGION)
     AWS_POLICY = {'Statement':
                   [{'Action': ['cloudformation:CreateStack',
                                'cloudformation:CreateUploadBucket',
@@ -35,17 +38,13 @@ class AWS(object):
                                'cloudformation:ValidateTemplate',
                                'cloudwatch:DescribeAlarms',
                                'cloudwatch:GetMetricStatistics',
+                               'rds:Describe*',
+                               'rds:ListTagsForResource',
                                's3:GetBucketLocation', 's3:GetObject',
                                's3:PutObject',
                                'sts:DecodeAuthorizationMessage'],
                     'Effect': 'Allow', 'Resource': '*'},
-                   {'Action': ['ec2:DescribeAvailabilityZones',
-                               'ec2:DescribeImages',
-                               'ec2:DescribeInstanceStatus',
-                               'ec2:DescribeInstances', 'ec2:DescribeKeyPairs',
-                               'ec2:DescribeSecurityGroups',
-                               'ec2:DescribeSubnets', 'ec2:DescribeTags',
-                               'ec2:DescribeVPCs'],
+                   {'Action': ['ec2:Describe*'],
                     'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
                     'Effect': 'Allow', 'Resource': '*'}]}
     PROFILE = 'admin'
@@ -118,8 +117,13 @@ class AWS(object):
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
                      'UserIdGroupPairs': [{'GroupName': self.team}]}])
 
-        # Configure the user's AWS policy.
         policy = copy.deepcopy(self.AWS_POLICY)
+        # State-based policies
+        policy['Statement'].append(
+            {'Action': ['cloudformation:DeleteStack',
+                        'cloudformation:UpdateStack'],
+             'Effect': 'Allow',
+             'Resource': AWS.ARNCF.format('stack/{0}*'.format(self.team))})
         policy['Statement'].append(
             {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
                         'ec2:StopInstances', 'ec2:TerminateInstances'],
@@ -129,10 +133,10 @@ class AWS(object):
                      '{0}*'.format(self.team)}},
              'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
         policy['Statement'].append(
-            {'Action': ['cloudformation:DeleteStack',
-                        'cloudformation:UpdateStack'],
+            {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNCF.format('stack/{0}*'.format(self.team))})
+             'Resource': AWS.ARNRDS.format('{0}*'.format(self.team))})
+        # Creation policies
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Effect': 'Allow',
@@ -142,14 +146,23 @@ class AWS(object):
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
                           AWS.ARNEC2.format('volume/*')]})
-        # Filter the instances types that are allowed to be started
+        # Filter the EC2 instances types that are allowed to be started
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Condition': {
-                 'StringLike': {'ec2:InstanceType': ['t1.micro', 'm1.small']}},
+                 'StringLike': {'ec2:InstanceType': self.EC2_INSTANCES}},
              'Effect': 'Allow',
              'Resource': AWS.ARNEC2.format('instance/*')})
-
+        # Filter the RDS instance types that are allowed to be started
+        policy['Statement'].append(
+            {'Action': ['rds:CreateDBInstance', 'rds:ModifyDBInstance'],
+             'Condition': {
+                 'Bool': {'rds:MultiAz': 'false'},
+                 'NumericEquals': {'rds:Piops': '0', 'rds:StorageSize': '5'},
+                 'StringEquals': {'rds:DatabaseEngine': 'mysql'},
+                 'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
+             'Effect': 'Allow',
+             'Resource': AWS.ARNRDS.format('{0}*'.format(self.team))})
         self.op(self.iam, 'PutUserPolicy', UserName=self.team,
                 PolicyName=self.team, PolicyDocument=json.dumps(policy))
 
