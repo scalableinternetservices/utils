@@ -41,7 +41,6 @@
             "Type": "String"}},
     "Resources": {
         "Database": {
-            "Type": "AWS::RDS::DBInstance",
             "Properties": {
                 "AllocatedStorage": "5",
                 "BackupRetentionPeriod": "0",
@@ -51,7 +50,19 @@
                 "Engine": "mysql",
                 "MasterUsername": "root",
                 "MasterUserPassword": "password",
-                "VPCSecurityGroups": [{"Ref": "SecurityGroup"}]}},
+                "VPCSecurityGroups": [{"Ref": "SecurityGroup"}]},
+            "Type": "AWS::RDS::DBInstance"},
+        "LoadBalancer": {
+            "Properties": {
+                "AvailabilityZones": {"Fn::GetAZs" : ""},
+                "Instances": [{"Ref": "WebServer"}],
+                "LBCookieStickinessPolicy": [{"PolicyName": "CookiePolicy",
+                                              "CookieExpirationPeriod": "30"}],
+                "LoadBalancerName": {"Ref": "AWS::StackName"},
+                "Listeners": [{"InstancePort": "80", "LoadBalancerPort": "80",
+                               "PolicyNames": ["CookiePolicy"],
+                               "Protocol": "http"}]},
+            "Type": "AWS::ElasticLoadBalancing::LoadBalancer"},
         "WaitCondition": {
             "DependsOn": "WebServer",
             "Properties": {
@@ -79,13 +90,7 @@
                                 "gcc-c++": [],
                                 "make": [],
                                 "mysql-devel": [],
-                                "mysql-server": [],
                                 "ruby21-devel": []}},
-                        "services": {
-                            "sysvinit": {
-                                "mysqld": {
-                                    "enabled": "true",
-                                    "ensureRunning": "true"}}},
                         "sources": {
                             "/home/ec2-user/app": {"Fn::Join": ["", [
                                 "https://github.com/scalableinternetservices/",

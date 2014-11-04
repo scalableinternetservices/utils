@@ -28,19 +28,15 @@ class AWS(object):
               .format(REGION))
     ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
     POLICY = {'Statement':
-              [{'Action': ['cloudformation:CreateStack',
-                           'cloudformation:CreateUploadBucket',
-                           'cloudformation:DescribeStackEvents',
-                           'cloudformation:DescribeStacks',
-                           'cloudformation:GetStackPolicy',
-                           'cloudformation:GetTemplate',
-                           'cloudformation:ListStackResources',
-                           'cloudformation:ListStacks',
+              [{'Action': ['cloudformation:CreateUploadBucket',
+                           'cloudformation:Describe*',
+                           'cloudformation:Get*',
+                           'cloudformation:ListStack*',
                            'cloudformation:ValidateTemplate',
                            'cloudwatch:DescribeAlarms',
                            'cloudwatch:GetMetricStatistics',
-                           'rds:Describe*', 'rds:ListTagsForResource',
-                           's3:GetBucketLocation', 's3:GetObject',
+                           'elasticloadbalancing:Describe*', 'rds:Describe*',
+                           'rds:ListTagsForResource', 's3:Get*',
                            's3:PutObject', 'sts:DecodeAuthorizationMessage'],
                 'Effect': 'Allow', 'Resource': '*'},
                {'Action': ['ec2:Describe*'],
@@ -127,7 +123,8 @@ class AWS(object):
         policy = {'Statement': []}
         # State-based policies
         policy['Statement'].append(
-            {'Action': ['cloudformation:DeleteStack',
+            {'Action': ['cloudformation:CreateStack',
+                        'cloudformation:DeleteStack',
                         'cloudformation:UpdateStack'],
              'Effect': 'Allow',
              'Resource': AWS.ARNCF.format('stack/{0}*'.format(self.team))})
@@ -139,6 +136,10 @@ class AWS(object):
                      'ec2:ResourceTag/aws:cloudformation:stack-name':
                      '{0}*'.format(self.team)}},
              'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
+        policy['Statement'].append(
+            {'Action': 'elasticloadbalancing:*',
+             'Effect': 'Allow',
+             'Resource': AWS.ARNELB.format('{}*'.format(self.team))})
         policy['Statement'].append(
             {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
