@@ -11,7 +11,6 @@
 from __future__ import print_function
 from docopt import docopt
 import botocore.session
-import copy
 import json
 import os
 import random
@@ -22,31 +21,32 @@ import sys
 class AWS(object):
     EC2_INSTANCES = ['t1.micro', 'm1.small']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
-    EC2_REGION = 'us-west-2'
-    ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(EC2_REGION)
-    ARNEC2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(EC2_REGION)
-    ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(EC2_REGION)
-    AWS_POLICY = {'Statement':
-                  [{'Action': ['cloudformation:CreateStack',
-                               'cloudformation:CreateUploadBucket',
-                               'cloudformation:DescribeStackEvents',
-                               'cloudformation:DescribeStacks',
-                               'cloudformation:GetStackPolicy',
-                               'cloudformation:GetTemplate',
-                               'cloudformation:ListStackResources',
-                               'cloudformation:ListStacks',
-                               'cloudformation:ValidateTemplate',
-                               'cloudwatch:DescribeAlarms',
-                               'cloudwatch:GetMetricStatistics',
-                               'rds:Describe*',
-                               'rds:ListTagsForResource',
-                               's3:GetBucketLocation', 's3:GetObject',
-                               's3:PutObject',
-                               'sts:DecodeAuthorizationMessage'],
-                    'Effect': 'Allow', 'Resource': '*'},
-                   {'Action': ['ec2:Describe*'],
-                    'Condition': {'StringEquals': {'ec2:Region': EC2_REGION}},
-                    'Effect': 'Allow', 'Resource': '*'}]}
+    REGION = 'us-west-2'
+    ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
+    ARNEC2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(REGION)
+    ARNELB = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
+              .format(REGION))
+    ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
+    POLICY = {'Statement':
+              [{'Action': ['cloudformation:CreateStack',
+                           'cloudformation:CreateUploadBucket',
+                           'cloudformation:DescribeStackEvents',
+                           'cloudformation:DescribeStacks',
+                           'cloudformation:GetStackPolicy',
+                           'cloudformation:GetTemplate',
+                           'cloudformation:ListStackResources',
+                           'cloudformation:ListStacks',
+                           'cloudformation:ValidateTemplate',
+                           'cloudwatch:DescribeAlarms',
+                           'cloudwatch:GetMetricStatistics',
+                           'rds:Describe*', 'rds:ListTagsForResource',
+                           's3:GetBucketLocation', 's3:GetObject',
+                           's3:PutObject', 'sts:DecodeAuthorizationMessage'],
+                'Effect': 'Allow', 'Resource': '*'},
+               {'Action': ['ec2:Describe*'],
+                'Condition': {'StringEquals': {'ec2:Region': REGION}},
+                'Effect': 'Allow', 'Resource': '*'}]}
+    GROUP = 'cs290'
     PROFILE = 'admin'
 
     @staticmethod
@@ -71,7 +71,7 @@ class AWS(object):
         self.aws = botocore.session.get_session()
         self.aws.profile = self.PROFILE
         self.team = team
-        self.ec2 = self.get_service('ec2', self.EC2_REGION)
+        self.ec2 = self.get_service('ec2', self.REGION)
         self.iam = self.get_service('iam', None)
 
     def get_service(self, service_name, endpoint_name):
@@ -82,6 +82,11 @@ class AWS(object):
     def configure(self):
         # self.operation_list(self.ec2)
         # self.operation_list(self.iam)
+
+        # Create cs290 group if it does not exist
+        self.op(self.iam, 'CreateGroup', GroupName=self.GROUP)
+        self.op(self.iam, 'PutGroupPolicy', GroupName=self.GROUP,
+                PolicyName=self.GROUP, PolicyDocument=json.dumps(self.POLICY))
 
         # Configure user account / password / access keys / keypair
         if self.op(self.iam, 'CreateUser', UserName=self.team):
@@ -100,6 +105,8 @@ class AWS(object):
                     os.chmod(filename, 0600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
+        self.op(self.iam, 'AddUserToGroup', GroupName=self.GROUP,
+                UserName=self.team)
 
         # Configure security group
         self.op(self.ec2, 'CreateSecurityGroup', GroupName=self.team,
@@ -117,7 +124,7 @@ class AWS(object):
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
                      'UserIdGroupPairs': [{'GroupName': self.team}]}])
 
-        policy = copy.deepcopy(self.AWS_POLICY)
+        policy = {'Statement': []}
         # State-based policies
         policy['Statement'].append(
             {'Action': ['cloudformation:DeleteStack',
