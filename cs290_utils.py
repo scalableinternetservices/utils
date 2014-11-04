@@ -28,7 +28,8 @@ class AWS(object):
               .format(REGION))
     ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
     POLICY = {'Statement':
-              [{'Action': ['cloudformation:CreateUploadBucket',
+              [{'Action': ['autoscaling:*',  # No fine grained permissions
+                           'cloudformation:CreateUploadBucket',
                            'cloudformation:Describe*',
                            'cloudformation:Get*',
                            'cloudformation:ListStack*',

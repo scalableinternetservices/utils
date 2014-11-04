@@ -6,8 +6,15 @@
             "Value": {
                 "Fn::Join": [
                     "", ["http://",
-                         {"Fn::GetAtt": ["WebServer", "PublicDnsName"]}]]}}},
+                         {"Fn::GetAtt": ["LoadBalancer", "DNSName"]}]]}}},
     "Parameters": {
+        "AppInstances": {
+            "ConstraintDescription": "must be between 1 and 8 EC2 instances.",
+            "Default": "2",
+            "Description": "The number of WebServer EC2 instances",
+            "MaxValue": "8",
+            "MinValue": "1",
+            "Type": "Number"},
         "AppInstanceType": {
             "AllowedValues": ["t1.micro", "m1.small", "m1.medium", "m1.large",
                               "m1.xlarge", "m2.xlarge", "m2.2xlarge",
@@ -55,7 +62,6 @@
         "LoadBalancer": {
             "Properties": {
                 "AvailabilityZones": {"Fn::GetAZs" : ""},
-                "Instances": [{"Ref": "WebServer"}],
                 "LBCookieStickinessPolicy": [{"PolicyName": "CookiePolicy",
                                               "CookieExpirationPeriod": "30"}],
                 "LoadBalancerName": {"Ref": "AWS::StackName"},
@@ -64,13 +70,22 @@
                                "Protocol": "http"}]},
             "Type": "AWS::ElasticLoadBalancing::LoadBalancer"},
         "WaitCondition": {
-            "DependsOn": "WebServer",
+            "DependsOn": "WebServerGroup",
             "Properties": {
+                "Count": {"Ref": "AppInstances"},
                 "Handle": {"Ref": "WaitHandle"},
                 "Timeout": "1500"},
             "Type": "AWS::CloudFormation::WaitCondition"},
         "WaitHandle": {"Type": "AWS::CloudFormation::WaitConditionHandle"},
-        "WebServer": {
+        "WebServerGroup": {
+            "Properties": {
+                "AvailabilityZones": {"Fn::GetAZs": ""},
+                "LaunchConfigurationName": {"Ref": "WebServerInstanceConfig"},
+                "LoadBalancerNames": [{"Ref": "LoadBalancer"}],
+                "MaxSize": {"Ref": "AppInstances"},
+                "MinSize": {"Ref": "AppInstances"}},
+            "Type": "AWS::AutoScaling::AutoScalingGroup"},
+        "WebServerInstanceConfig": {
             "Metadata": {
                 "AWS::CloudFormation::Init": {
                     "config": {
@@ -114,7 +129,7 @@
                             "}\n",
                             "# Run cfn-init (see AWS::CloudFormation::Init)\n",
                             "/opt/aws/bin/cfn-init -s ",
-                            {"Ref": "AWS::StackId"}, " -r WebServer ",
+                            {"Ref": "AWS::StackId"}, " -r WebServerInstanceConfig ",
                             "--region ", {"Ref": "AWS::Region"},
                             " || error_exit 'Failed to run cfn-init'\n",
                             "alternatives --set ruby /usr/bin/ruby2.1\n",
@@ -135,4 +150,4 @@
                             "# All is well so signal success\n",
                             "/opt/aws/bin/cfn-signal -e 0 -r \"Rails application setup complete\" '",
                             {"Ref": "WaitHandle"}, "'\n"]]}}},
-            "Type": "AWS::EC2::Instance"}}}
+            "Type": "AWS::AutoScaling::LaunchConfiguration"}}}
