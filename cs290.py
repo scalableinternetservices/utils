@@ -12,7 +12,6 @@
 from __future__ import print_function
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
-import botocore.session
 import json
 import os
 import random
@@ -68,6 +67,7 @@ class AWS(object):
         sys.exit(1)
 
     def __init__(self):
+        import botocore.session
         self.aws = botocore.session.get_session()
         self.aws.profile = self.PROFILE
         self.ec2 = self.get_service('ec2', self.REGION)
