@@ -10,6 +10,7 @@
 """
 
 from __future__ import print_function
+from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
 import botocore.session
 import json
@@ -48,11 +49,12 @@ class AWS(object):
     PROFILE = 'admin'
 
     @staticmethod
-    def op(serv, operation, **kwargs):
+    def op(serv, operation, debug_output=True, **kwargs):
         """Execute an AWS operation and check the response status."""
         code, data = serv[0].get_operation(operation).call(serv[1], **kwargs)
         if code.status_code == 200:
-            print('Success: {0} {1}'.format(operation, kwargs))
+            if debug_output:
+                print('Success: {0} {1}'.format(operation, kwargs))
             return data
         else:
             print(data['Error']['Message'])
@@ -73,7 +75,13 @@ class AWS(object):
 
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
-        print('Clean up')
+        cf = self.get_service('cloudformation', self.REGION)
+        now = datetime.now(UTC())
+        for stack in self.op(cf, 'ListStacks', False)['StackSummaries']:
+            if stack['StackStatus'] in {'DELETE_COMPLETE'}:
+                continue
+            if now - stack['CreationTime'] > timedelta(hours=8):
+                self.op(cf, 'DeleteStack', StackName=stack['StackName'])
 
     def configure(self, team):
         """Create account and configure settings for a team.
@@ -201,6 +209,21 @@ class AWS(object):
         self.op(self.ec2, 'DeleteKeyPair', KeyName=team)
         self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
         return 0
+
+
+class UTC(tzinfo):
+    """UTC tz
+
+    From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
+    """
+    def dst(self, _):
+        return timedelta(0)
+
+    def tzname(self, _):
+        return 'UTC'
+
+    def utcoffset(self, _):
+        return timedelta(0)
 
 
 def configure_github_team(team_name, user_names):
