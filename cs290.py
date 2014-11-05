@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 """Usage:
-  cs290_utils aws TEAM
-  cs290_utils aws-purge TEAM
-  cs290_utils gh TEAM USER...
+  cs290 aws TEAM
+  cs290 aws-cleanup
+  cs290 aws-purge TEAM
+  cs290 gh TEAM USER...
 
 -h --help  show this message
 """
@@ -64,19 +65,20 @@ class AWS(object):
         pprint.pprint(service_name[0].operations)
         sys.exit(1)
 
-    def __init__(self, team):
+    def __init__(self):
         self.aws = botocore.session.get_session()
         self.aws.profile = self.PROFILE
-        self.team = team
         self.ec2 = self.get_service('ec2', self.REGION)
         self.iam = self.get_service('iam', None)
 
-    def get_service(self, service_name, endpoint_name):
-        """Return a tuple containing the service and associated endpoint."""
-        service = self.aws.get_service(service_name)
-        return service, service.get_endpoint(endpoint_name)
+    def cleanup(self):
+        """Clean up old stacks and EC2 instances."""
+        print('Clean up')
 
-    def configure(self):
+    def configure(self, team):
+        """Create account and configure settings for a team.
+
+        This method can be run subsequent times to apply team updates."""
         # self.operation_list(self.ec2)
         # self.operation_list(self.iam)
 
@@ -86,40 +88,40 @@ class AWS(object):
                 PolicyName=self.GROUP, PolicyDocument=json.dumps(self.POLICY))
 
         # Configure user account / password / access keys / keypair
-        if self.op(self.iam, 'CreateUser', UserName=self.team):
-            self.op(self.iam, 'CreateLoginProfile', UserName=self.team,
+        if self.op(self.iam, 'CreateUser', UserName=team):
+            self.op(self.iam, 'CreateLoginProfile', UserName=team,
                     Password=generate_password())
-            data = self.op(self.iam, 'CreateAccessKey', UserName=self.team)
+            data = self.op(self.iam, 'CreateAccessKey', UserName=team)
             if data:
                 print('AccessKey: {0}'
                       .format(data['AccessKey']['AccessKeyId']))
                 print('SecretKey: {0}'
                       .format(data['AccessKey']['SecretAccessKey']))
-            data = self.op(self.ec2, 'CreateKeyPair', KeyName=self.team)
+            data = self.op(self.ec2, 'CreateKeyPair', KeyName=team)
             if data:
-                filename = '{0}.pem'.format(self.team)
+                filename = '{0}.pem'.format(team)
                 with open(filename, 'w') as fd:
                     os.chmod(filename, 0600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
         self.op(self.iam, 'AddUserToGroup', GroupName=self.GROUP,
-                UserName=self.team)
+                UserName=team)
 
         # Configure security group
-        self.op(self.ec2, 'CreateSecurityGroup', GroupName=self.team,
-                Description=self.team)
+        self.op(self.ec2, 'CreateSecurityGroup', GroupName=team,
+                Description=team)
         for port in [22, 80, 443]:  # Open standard ports to all addresses.
             # These are run one at a time so that existance of one doesn't
             # prevent the creation of the others.
             rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
             self.op(self.ec2, 'AuthorizeSecurityGroupIngress',
-                    GroupName=self.team, IpPermissions=[rule])
+                    GroupName=team, IpPermissions=[rule])
         # Permit all instances in the SecurityGroup to talk to each other
-        self.op(self.ec2, 'AuthorizeSecurityGroupIngress', GroupName=self.team,
+        self.op(self.ec2, 'AuthorizeSecurityGroupIngress', GroupName=team,
                 IpPermissions=[
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
-                     'UserIdGroupPairs': [{'GroupName': self.team}]}])
+                     'UserIdGroupPairs': [{'GroupName': team}]}])
 
         policy = {'Statement': []}
         # State-based policies
@@ -128,29 +130,29 @@ class AWS(object):
                         'cloudformation:DeleteStack',
                         'cloudformation:UpdateStack'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNCF.format('stack/{0}*'.format(self.team))})
+             'Resource': AWS.ARNCF.format('stack/{0}*'.format(team))})
         policy['Statement'].append(
             {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
                         'ec2:StopInstances', 'ec2:TerminateInstances'],
              'Condition': {
                  'StringLike': {
                      'ec2:ResourceTag/aws:cloudformation:stack-name':
-                     '{0}*'.format(self.team)}},
+                     '{0}*'.format(team)}},
              'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
         policy['Statement'].append(
             {'Action': 'elasticloadbalancing:*',
              'Effect': 'Allow',
-             'Resource': AWS.ARNELB.format('{}*'.format(self.team))})
+             'Resource': AWS.ARNELB.format('{}*'.format(team))})
         policy['Statement'].append(
             {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(self.team))})
+             'Resource': AWS.ARNRDS.format('{0}*'.format(team))})
         # Creation policies
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Effect': 'Allow',
              'Resource': [AWS.ARNEC2.format('image/*'),
-                          AWS.ARNEC2.format('key-pair/{0}'.format(self.team)),
+                          AWS.ARNEC2.format('key-pair/{0}'.format(team)),
                           AWS.ARNEC2.format('network-interface/*'),
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
@@ -171,24 +173,33 @@ class AWS(object):
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(self.team))})
-        self.op(self.iam, 'PutUserPolicy', UserName=self.team,
-                PolicyName=self.team, PolicyDocument=json.dumps(policy))
+             'Resource': AWS.ARNRDS.format('{0}*'.format(team))})
+        self.op(self.iam, 'PutUserPolicy', UserName=team,
+                PolicyName=team, PolicyDocument=json.dumps(policy))
 
         return 0
 
-    def purge(self):
-        self.op(self.iam, 'DeleteLoginProfile', UserName=self.team)
-        self.op(self.iam, 'DeleteUserPolicy', UserName=self.team,
-                PolicyName=self.team)
-        resp = self.op(self.iam, 'ListAccessKeys', UserName=self.team)
+    def get_service(self, service_name, endpoint_name):
+        """Return a tuple containing the service and associated endpoint."""
+        service = self.aws.get_service(service_name)
+        return service, service.get_endpoint(endpoint_name)
+
+    def purge(self, team):
+        """Remove all settings pertaining to `team`."""
+        self.op(self.iam, 'DeleteLoginProfile', UserName=team)
+        self.op(self.iam, 'DeleteUserPolicy', UserName=team,
+                PolicyName=team)
+        resp = self.op(self.iam, 'ListAccessKeys', UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
-                self.op(self.iam, 'DeleteAccessKey', UserName=self.team,
+                self.op(self.iam, 'DeleteAccessKey', UserName=team,
                         AccessKeyId=keydata['AccessKeyId'])
-        self.op(self.iam, 'DeleteUser', UserName=self.team)
-        self.op(self.ec2, 'DeleteKeyPair', KeyName=self.team)
-        self.op(self.ec2, 'DeleteSecurityGroup', GroupName=self.team)
+
+        self.op(self.iam, 'RemoveUserFromGroup', GroupName=self.GROUP,
+                UserName=team)
+        self.op(self.iam, 'DeleteUser', UserName=team)
+        self.op(self.ec2, 'DeleteKeyPair', KeyName=team)
+        self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
         return 0
 
 
@@ -293,9 +304,11 @@ def main():
         args['TEAM'] = args['TEAM'].replace(' ', '-')
 
     if args['aws']:
-        return AWS(args['TEAM']).configure()
+        return AWS().configure(args['TEAM'])
+    elif args['aws-cleanup']:
+        return AWS().cleanup()
     elif args['aws-purge']:
-        return AWS(args['TEAM']).purge()
+        return AWS().purge(args['TEAM'])
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
