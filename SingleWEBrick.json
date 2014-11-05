@@ -96,8 +96,6 @@
                             "rake db:create db:migrate || error_exit 'Failed to execute database migration'\n",
                             "# Startup the rails server\n",
                             "rails server -d -p 80\n",
-                            "echo \"cd /home/ec2-user/app\" >> /etc/rc.local\n",
-                            "echo \"rails server -d\" >> /etc/rc.local\n",
                             "# All is well so signal success\n",
                             "/opt/aws/bin/cfn-signal -e 0 -r \"Rails application setup complete\" '",
                             {"Ref": "WaitHandle"}, "'\n"]]}}},
