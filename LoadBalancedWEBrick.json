@@ -156,7 +156,7 @@
                             "  error_exit 'Failed ten times to execute database migration'\n",
                             "fi\n",
                             "# Fix multi_json gem version (>1.7.8 has issues precompiling assets)\n",
-                            "echo -e \"\ngem 'multi_json', '1.7.8'\" >> Gemfile\n",
+                            "echo -e \"\\ngem 'multi_json', '1.7.8'\" >> Gemfile\n",
                             "bundle update multi_json\n",
                             "# Generate static assets\n",
                             "rake assets:precompile || error_exit 'Failed to precompile static assets'\n",
