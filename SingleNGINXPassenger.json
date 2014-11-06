@@ -48,6 +48,7 @@
                         "packages": {
                             "yum": {
                                 "gcc-c++": [],
+                                "git": [],
                                 "libcurl-devel": [],
                                 "make": [],
                                 "mysql-devel": [],

@@ -103,6 +103,7 @@
                         "packages": {
                             "yum": {
                                 "gcc-c++": [],
+                                "git": [],
                                 "make": [],
                                 "mysql-devel": [],
                                 "ruby21-devel": []}},
