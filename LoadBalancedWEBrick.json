@@ -106,7 +106,8 @@
                                 "git": [],
                                 "make": [],
                                 "mysql-devel": [],
-                                "ruby21-devel": []}},
+                                "ruby21-devel": [],
+                                "git": []}},
                         "sources": {
                             "/home/ec2-user/app": {"Fn::Join": ["", [
                                 "https://github.com/scalableinternetservices/",
