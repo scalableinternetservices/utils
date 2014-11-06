@@ -4,11 +4,11 @@
 
 Both the app server, and database are located on a single EC2 instance.
 
-* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014309GkK-SingleWEBrick.json):
+* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/20143109fT-SingleWEBrick.json):
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.
 * [NGINX +
-  Passenger](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014310Ce6-SingleNGINXPassenger.json):
+  Passenger](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014310fj8-SingleNGINXPassenger.json):
   NGINX handles requests to port 80 and passes connections to instances of the
   app through Passenger. Multiple concurrent connections are supported.
 
@@ -19,7 +19,7 @@ These templates launch stacks where a load balancer (ELB) distributes requests
 across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
-* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014310h3v-LoadBalancedWEBrick.json)
+* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014310wtd-LoadBalancedWEBrick.json)
 * NGINX + Passenger: Coming soon
 
 
