@@ -19,7 +19,7 @@ These templates launch stacks where a load balancer (ELB) distributes requests
 across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
-* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014309bSR-CS290LoadBalanced.template)
+* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/20143102Gs-LoadBalancedWEBrick.json)
 * [NGINX + Passenger](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014309sRM-LoadBalancedWEBrick.json)
 
 
