@@ -51,7 +51,8 @@
                                 "make": [],
                                 "mysql-devel": [],
                                 "mysql-server": [],
-                                "ruby21-devel": []}},
+                                "ruby21-devel": [],
+                                "git": []}},
                         "services": {
                             "sysvinit": {
                                 "mysqld": {

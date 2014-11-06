@@ -53,7 +53,8 @@
                                 "mysql-devel": [],
                                 "mysql-server": [],
                                 "pcre-devel": [],
-                                "ruby21-devel": []}},
+                                "ruby21-devel": [],
+                                "git": []}},
                         "services": {
                             "sysvinit": {
                                 "mysqld": {
