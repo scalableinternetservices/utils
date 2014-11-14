@@ -95,6 +95,8 @@
                             "bundle install --without test development || error_exit 'Failed to install bundle'\n",
                             "# Create the database and run the migrations\n",
                             "rake db:create db:migrate || error_exit 'Failed to execute database migration'\n",
+                            "# Run app specific configuration\n",
+                            "if [ -f .ec2_initialize ]; then source .ec2_initialize; fi\n",
                             "# Fix multi_json gem version (>1.7.8 has issues precompiling assets)\n",
                             "echo -e \"\\ngem 'multi_json', '1.7.8'\" >> Gemfile\n",
                             "bundle update multi_json\n",

@@ -1,0 +1,78 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "InstanceType": {
+            "AllowedValues": ["t1.micro", "m1.small", "m1.medium", "m1.large",
+                              "m1.xlarge", "m2.xlarge", "m2.2xlarge",
+                              "m2.4xlarge", "m3.xlarge", "m3.2xlarge"],
+            "ConstraintDescription": "must be a valid t1, m1, or m2 EC2 instance type.",
+            "Default": "t1.micro",
+            "Description": "EC2 instance type",
+            "Type": "String"},
+        "TeamName": {
+            "AllowedValues": ["BaconWindshield", "Compete", "Gradr", "Lab-App",
+                              "labapp", "LaPlaya", "Motley-Crew", "picShare",
+                              "Suppr", "Team-Hytta", "Upvid", "Xup"],
+            "ConstraintDescription": "Must exactly match your team name as shown in your GitHub URL.",
+            "Description": "CS290 team name (the stack name must start with the team name)",
+            "Type": "String"}},
+    "Resources": {
+        "Instance": {
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "config": {
+                        "packages": {
+                            "yum": {
+                                "gcc-c++": [],
+                                "libcurl-devel": [],
+                                "make": [],
+                                "openssl-devel": [],
+                                "pcre-devel": [],
+                                "ruby21-devel": []}}}}},
+            "Properties": {
+                "ImageId": "ami-55a7ea65",
+                "InstanceType": {"Ref": "InstanceType"},
+                "KeyName": {"Ref": "TeamName"},
+                "SecurityGroups": [{"Ref": "TeamName"}],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": ["", [
+                            "#!/bin/bash -v\n",
+                            "yum update -y\n",
+                            "# Helper function\n",
+                            "function error_exit {\n",
+                            "  /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '",
+                            {"Ref": "WaitHandle"}, "'\n",
+                            "  exit 1\n",
+                            "}\n",
+                            "# Run cfn-init (see AWS::CloudFormation::Init)\n",
+                            "/opt/aws/bin/cfn-init -s ",
+                            {"Ref": "AWS::StackId"}, " -r Instance ",
+                            "--region ", {"Ref": "AWS::Region"},
+                            " || error_exit 'Failed to run cfn-init'\n",
+                            "alternatives --set ruby /usr/bin/ruby2.1\n",
+                            "alternatives --set gem /usr/bin/gem2.1\n",
+                            "# Install passenger\n",
+                            "gem install passenger || error_exit 'Failed to install passenger gem'\n",
+                            "# Add swap if running on t1.micro\n",
+                            "if [ \"", {"Ref": "InstanceType"}, "\" == \"t1.micro\" ]; then\n",
+                            "  dd if=/dev/zero of=/swap bs=1M count=512 || error_exit 'Failed to create swap file'\n",
+                            "  mkswap /swap || error_exit 'Failed to mkswap'\n",
+                            "  swapon /swap || error_exit 'Failed to enable swap'\n",
+                            "fi\n",
+                            "/usr/local/bin/passenger start -d || error_exit 'Failed to start passenger'\n",
+                            "if [ \"", {"Ref": "InstanceType"}, "\" == \"t1.micro\" ]; then\n",
+                            "  swapoff /swap || error_exit 'Failed to remove swap'\n",
+                            "  rm /swap\n",
+                            "fi\n",
+                            "# All is well so signal success\n",
+                            "/opt/aws/bin/cfn-signal -e 0 -r \"Rails application setup complete\" '",
+                            {"Ref": "WaitHandle"}, "'\n"]]}}},
+            "Type": "AWS::EC2::Instance"},
+        "WaitCondition": {
+            "DependsOn": "Instance",
+            "Properties": {
+                "Handle": {"Ref": "WaitHandle"},
+                "Timeout": "1500"},
+            "Type": "AWS::CloudFormation::WaitCondition"},
+        "WaitHandle": {"Type": "AWS::CloudFormation::WaitConditionHandle"}}}

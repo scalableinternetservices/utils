@@ -156,6 +156,8 @@
                             "if [ $loop -eq 0 ]; then\n",
                             "  error_exit 'Failed ten times to execute database migration'\n",
                             "fi\n",
+                            "# Run app specific configuration\n",
+                            "if [ -f .ec2_initialize ]; then source .ec2_initialize; fi\n",
                             "# Fix multi_json gem version (>1.7.8 has issues precompiling assets)\n",
                             "echo -e \"\\ngem 'multi_json', '1.7.8'\" >> Gemfile\n",
                             "bundle update multi_json\n",
