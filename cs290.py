@@ -6,12 +6,14 @@ Usage:
   cs290 aws TEAM
   cs290 aws-cleanup
   cs290 aws-purge TEAM
+  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 gh TEAM USER...
 
 -h --help  show this message
 """
 
 from __future__ import print_function
+import copy
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
 import json
@@ -218,6 +220,96 @@ class AWS(object):
         return 0
 
 
+class CFTemplate(object):
+
+    """Generate CS290 Cloudformation templates."""
+
+    DEFAULT_AMI = 'ami-55a7ea65'
+    INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+                 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 'm3.xlarge',
+                 'm3.2xlarge']
+    # TEAMs for now needs to be updated on a per-class basis.
+    TEAMS = ['BaconWindshield', 'Compete', 'Gradr', 'Lab-App', 'labapp',
+             'LaPlaya', 'Motley-Crew', 'picShare', 'Suppr', 'Team-Hytta',
+             'Upvid', 'Xup']
+
+    TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
+                'Outputs': {},
+                'Parameters': {},
+                'Resoures': {}}
+
+    @staticmethod
+    def get_att(resource, attribute):
+        """Apply the 'Fn:GetAtt' function on resource for attribute."""
+        return {'Fn:GetAtt': [resource, attribute]}
+
+    @staticmethod
+    def join(separator, *args):
+        """Apply the 'Fn:Join' function to args using separator."""
+        return {'Fn:Join': [separator, args]}
+
+    def __init__(self, app_ami, memcached, multi, passenger):
+        """Initialize the CFTemplate class.
+
+        :param app_ami: (str) The AMI to use for the app server instance(s).
+        :param memcached: (boolean) Template specifies a separate memcached
+            instance.
+        :param multi: (boolean) Template moves the database to its own RDB
+            instance, permits a variable number of app server instances, and
+            distributes load to those instances via ELB.
+        :param passenger: (boolean) Use passenger standalone (nginx) as the
+            entry-point into each app server rather than `rails s` (WEBrick by
+            default).
+        """
+        self.ami = app_ami if app_ami else self.DEFAULT_AMI
+        self.memcached = memcached
+        self.multi = multi
+        self.passenger = passenger
+        self.template = copy.deepcopy(self.TEMPLATE)
+
+    def add_output(self, name, description, value):
+        """Add a template output value."""
+        self.template['Outputs'][name] = {'Description': description,
+                                          'Value': value}
+
+    def add_parameter(self, name, ptype='String', allowed=None, default=None,
+                      description=None, error_msg=None):
+        """Add a template parameter."""
+        param = {'Type': ptype}
+        if allowed:
+            param['AllowedValues'] = allowed
+        if default:
+            param['Default'] = default
+        if description:
+            param['Description'] = description
+        if error_msg:
+            param['ConstraintDescription'] = error_msg
+        self.template['Parameters'][name] = param
+
+    def generate(self):
+        """Output the generated AWS cloudformation template."""
+        if self.passenger:
+            url = self.get_att(None, None)
+        else:
+            url = self.get_att('WebServer', 'PublicDnsName')
+        self.add_output('WebsiteURL', 'The URL to the rails application.',
+                        self.join('', 'http://', url))
+
+        self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
+                           default='t1.micro',
+                           description='App Server instance type',
+                           error_msg=('Must be a valid t1, m1, or m2 EC2 '
+                                      'instance type.'))
+        self.add_parameter('Branch', default='master',
+                           description='The git branch to deploy.')
+        self.add_parameter('TeamName', allowed=self.TEAMS,
+                           description='Your CS290 team name.',
+                           error_msg=('Must exactly match your team name as '
+                                      'shown in your Github URL.'))
+        print(json.dumps(self.template, indent=4, separators=(',', ': '),
+                         sort_keys=True))
+
+
 class UTC(tzinfo):
 
     """Specify the UTC timezone.
@@ -339,6 +431,10 @@ def main():
         return AWS().cleanup()
     elif args['aws-purge']:
         return AWS().purge(args['TEAM'])
+    elif args['cftemplate']:
+        return CFTemplate(app_ami=args['--app-ami'],
+                          memcached=args['--memcached'], multi=args['--multi'],
+                          passenger=args['--passenger']).generate()
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
