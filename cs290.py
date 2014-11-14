@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-"""Usage:
+"""CS290 administrative utility.
+
+Usage:
   cs290 aws TEAM
   cs290 aws-cleanup
   cs290 aws-purge TEAM
@@ -20,6 +22,9 @@ import sys
 
 
 class AWS(object):
+
+    """This class handled AWS administrative tasks."""
+
     EC2_INSTANCES = ['t1.micro', 'm1.small']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     REGION = 'us-west-2'
@@ -67,6 +72,7 @@ class AWS(object):
         sys.exit(1)
 
     def __init__(self):
+        """Initialize the AWS class."""
         import botocore.session
         self.aws = botocore.session.get_session()
         self.aws.profile = self.PROFILE
@@ -86,7 +92,8 @@ class AWS(object):
     def configure(self, team):
         """Create account and configure settings for a team.
 
-        This method can be run subsequent times to apply team updates."""
+        This method can be run subsequent times to apply team updates.
+        """
         # self.operation_list(self.ec2)
         # self.operation_list(self.iam)
 
@@ -212,21 +219,19 @@ class AWS(object):
 
 
 class UTC(tzinfo):
-    """UTC tz
+
+    """Specify the UTC timezone.
 
     From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
     """
-    def dst(self, _):
-        return timedelta(0)
 
-    def tzname(self, _):
-        return 'UTC'
-
-    def utcoffset(self, _):
-        return timedelta(0)
+    dst = lambda x, y: timedelta(0)
+    tzname = lambda x, y: 'UTC'
+    utcoffset = lambda x, y: timedelta(0)
 
 
 def configure_github_team(team_name, user_names):
+    """Create team and team repository and add users to the team on Github."""
     from github3 import login
     print("""About to create:
      Team: {0}
@@ -273,12 +278,13 @@ def configure_github_team(team_name, user_names):
 
 
 def generate_password(length=16):
+    """Generate a random password containing letters and digits."""
     ALPHA = string.ascii_letters + string.digits
     return ''.join(random.choice(ALPHA) for _ in range(length))
 
 
 def get_github_token():
-    """Fetch and/or load API authorization token for GITHUB."""
+    """Fetch and/or load API authorization token for Github."""
     credential_file = os.path.expanduser('~/.config/github_creds')
     if os.path.isfile(credential_file):
         with open(credential_file) as fd:
@@ -321,6 +327,7 @@ def get_pivotaltracker_token():
 
 
 def main():
+    """Enter cs290.py."""
     args = docopt(__doc__)
 
     if args['TEAM']:
