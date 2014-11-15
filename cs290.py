@@ -230,11 +230,29 @@ class AWS(object):
         self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
         return 0
 
-    def verify_template(self, template):
-        """Verify a cloudformation template."""
+    def verify_template(self, template, upload=None):
+        """Verify a cloudformation template.
+
+        :param upload: When provided, it should be a tuple containing the
+            bucket and key to upload the template to. If the template is valid,
+            it will be uploaded to this s3 bucket, and the URL to the template
+            in S3 will be returned. Note that this URL is not publicly
+            accessible, but it will work for CloudFormation Stack generation.
+        """
         cf = self.get_service('cloudformation', self.REGION)
-        return self.op(cf, 'ValidateTemplate', TemplateBody=template,
-                       debug_output=False)
+        valid = bool(self.op(cf, 'ValidateTemplate', TemplateBody=template,
+                             debug_output=False))
+        if not valid or upload is None:
+            return valid
+        # Upload to s3
+        bucket, key = upload
+        s3 = self.get_service('s3', None)
+        retval = self.op(s3, 'PutObject', Bucket=bucket, Key=key,
+                         debug_output=False)
+        if not retval:
+            return retval
+        return '{host}/{bucket}/{key}'.format(
+            host=s3[1].host, bucket=bucket, key=key)
 
 
 class CFTemplate(object):
@@ -284,6 +302,8 @@ alternatives --set gem /usr/bin/gem2.1
                 'Outputs': {},
                 'Parameters': {},
                 'Resources': {}}
+    # Update this bucket on a per-class-account basis
+    TEMPLATE_BUCKET = 'cf-templates-11antn0uuzgzy-us-west-2'
 
     @staticmethod
     def get_att(resource, attribute):
@@ -335,6 +355,15 @@ alternatives --set gem /usr/bin/gem2.1
                              'ruby21-devel']
         if not multi:
             self.yum_packages.append('mysql-server')
+
+        name_parts = []
+        name_parts.append('Multi' if multi else 'Single')
+        name_parts.append('Passenger' if passenger else 'WEBrick')
+        if memcached:
+            name_parts.append('Memcached')
+        if app_ami:
+            name_parts.append(app_ami)
+        self.name = ''.join(name_parts)
 
     def add_apps(self):
         """Add either a EC2 instanace or autoscaling group."""
@@ -423,8 +452,13 @@ alternatives --set gem /usr/bin/gem2.1
 
         template = json.dumps(self.template, indent=4, separators=(',', ': '),
                               sort_keys=True)
-        if AWS().verify_template(template):
-            print(template)
+        retval = AWS().verify_template(template, (self.TEMPLATE_BUCKET,
+                                                  self.name + '.json'))
+        if retval:
+            if isinstance(retval, bool):
+                print(template)
+            else:
+                print(retval)
 
 
 class UTC(tzinfo):
