@@ -5,6 +5,7 @@
 Usage:
   cs290 aws TEAM
   cs290 aws-cleanup
+  cs290 aws-groups
   cs290 aws-purge TEAM
   cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 gh TEAM USER...
@@ -16,6 +17,7 @@ from __future__ import print_function
 import copy
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
+from pprint import pprint
 import json
 import os
 import random
@@ -69,8 +71,7 @@ class AWS(object):
     @staticmethod
     def operation_list(service_name):
         """Output the available API commands and exit."""
-        import pprint
-        pprint.pprint(service_name[0].operations)
+        pprint(service_name[0].operations)
         sys.exit(1)
 
     def __init__(self):
@@ -201,6 +202,15 @@ class AWS(object):
         service = self.aws.get_service(service_name)
         return service, service.get_endpoint(endpoint_name)
 
+    def list_security_groups(self):
+        """Output the teams and their security groups.
+
+        This function is useful for updating the CFTemplate.TEAM2SG value.
+        """
+        retval = self.op(self.ec2, 'DescribeSecurityGroups')
+        pprint({x['GroupName']: {'sg': x['GroupId']} for x in
+                retval['SecurityGroups']})
+
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
         self.op(self.iam, 'DeleteLoginProfile', UserName=team)
@@ -219,6 +229,11 @@ class AWS(object):
         self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
         return 0
 
+    def verify_template(self, template):
+        """Verify a cloudformation template."""
+        cf = self.get_service('cloudformation', self.REGION)
+        print(self.op(cf, 'ValidateTemplate', TemplateBody=template))
+
 
 class CFTemplate(object):
 
@@ -228,15 +243,23 @@ class CFTemplate(object):
     INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
                  'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 'm3.xlarge',
                  'm3.2xlarge']
-    # TEAMs for now needs to be updated on a per-class basis.
-    TEAMS = ['BaconWindshield', 'Compete', 'Gradr', 'Lab-App', 'labapp',
-             'LaPlaya', 'Motley-Crew', 'picShare', 'Suppr', 'Team-Hytta',
-             'Upvid', 'Xup']
-
+    # Update this value periodically from the `cs290 aws-groups` output.
+    TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
+                'Compete': {'sg': 'sg-d33052b6'},
+                'Gradr': {'sg': 'sg-b53052d0'},
+                'LaPlaya': {'sg': 'sg-dd3052b8'},
+                'Lab-App': {'sg': 'sg-763c5213'},
+                'Motley-Crew': {'sg': 'sg-fa97fa9f'},
+                'Suppr': {'sg': 'sg-b13052d4'},
+                'Team-Hytta': {'sg': 'sg-1297fa77'},
+                'Upvid': {'sg': 'sg-bd3052d8'},
+                'Xup': {'sg': 'sg-a03052c5'},
+                'labapp': {'sg': 'sg-661f7203'},
+                'picShare': {'sg': 'sg-db3052be'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
-                'Resoures': {}}
+                'Resources': {}}
 
     @staticmethod
     def get_att(resource, attribute):
@@ -273,7 +296,7 @@ class CFTemplate(object):
                                           'Value': value}
 
     def add_parameter(self, name, ptype='String', allowed=None, default=None,
-                      description=None, error_msg=None):
+                      description=None, error_msg=None, maxv=None, minv=None):
         """Add a template parameter."""
         param = {'Type': ptype}
         if allowed:
@@ -284,30 +307,50 @@ class CFTemplate(object):
             param['Description'] = description
         if error_msg:
             param['ConstraintDescription'] = error_msg
+        if maxv:
+            param['MaxValue'] = maxv
+        if minv:
+            param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
     def generate(self):
         """Output the generated AWS cloudformation template."""
-        if self.passenger:
-            url = self.get_att(None, None)
-        else:
-            url = self.get_att('WebServer', 'PublicDnsName')
-        self.add_output('WebsiteURL', 'The URL to the rails application.',
-                        self.join('', 'http://', url))
 
+        # Common configuration
         self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
                            default='t1.micro',
-                           description='App Server instance type',
+                           description='The AppServer instance type.',
                            error_msg=('Must be a valid t1, m1, or m2 EC2 '
                                       'instance type.'))
         self.add_parameter('Branch', default='master',
                            description='The git branch to deploy.')
-        self.add_parameter('TeamName', allowed=self.TEAMS,
+        self.add_parameter('TeamName', allowed=self.TEAM_MAP.keys(),
                            description='Your CS290 team name.',
                            error_msg=('Must exactly match your team name as '
                                       'shown in your Github URL.'))
-        print(json.dumps(self.template, indent=4, separators=(',', ': '),
-                         sort_keys=True))
+
+        if self.multi:
+            url = self.get_att('LoadBalancer', 'DNSName')
+            self.add_parameter('AppInstances', 'Number', default=2,
+                               description=('The number of AppServer instances'
+                                            ' to launch.'),
+                               maxv=8, minv=1)
+            self.add_parameter('DBInstanceType', allowed=['db.' + x for x in
+                                                          self.INSTANCES],
+                               default='db.t1.micro',
+                               description='The Database instance type.',
+                               error_msg=('Must be a valid db.t1, db.m1, or '
+                                          'db.m2 EC2 instance type.'))
+            self.template['Mappings'] = {'Teams': self.TEAM_MAP}
+        else:
+            url = self.get_att('AppServer', 'PublicDnsName')
+        self.add_output('URL', 'The URL to the rails application.',
+                        self.join('', 'http://', url))
+
+        template = json.dumps(self.template, indent=4, separators=(',', ': '),
+                              sort_keys=True)
+        print(template)
+        AWS().verify_template(template)
 
 
 class UTC(tzinfo):
@@ -429,6 +472,8 @@ def main():
         return AWS().configure(args['TEAM'])
     elif args['aws-cleanup']:
         return AWS().cleanup()
+    elif args['aws-groups']:
+        return AWS().list_security_groups()
     elif args['aws-purge']:
         return AWS().purge(args['TEAM'])
     elif args['cftemplate']:
