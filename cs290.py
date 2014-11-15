@@ -18,6 +18,7 @@ import copy
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
 from pprint import pprint
+from string import Formatter
 import json
 import os
 import random
@@ -232,7 +233,8 @@ class AWS(object):
     def verify_template(self, template):
         """Verify a cloudformation template."""
         cf = self.get_service('cloudformation', self.REGION)
-        print(self.op(cf, 'ValidateTemplate', TemplateBody=template))
+        return self.op(cf, 'ValidateTemplate', TemplateBody=template,
+                       debug_output=False)
 
 
 class CFTemplate(object):
@@ -240,6 +242,28 @@ class CFTemplate(object):
     """Generate CS290 Cloudformation templates."""
 
     DEFAULT_AMI = 'ami-55a7ea65'
+    # The following strings are python-format strings, however, the values
+    # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
+    # escape intended brackets: '{' => '{{', '}' => '}}'
+    INIT = {'preamble': """#!/bin/bash -v
+yum update -y aws-cfn-bootstrap
+# Helper function
+function error_exit {{
+    /opt/aws/bin/cfn-signal -e 1 -r "$1" --stack {AWS::StackName} \
+      --resource AppServer --region {AWS::Region}
+    exit 1
+}}
+# Run cfn-init (see AWS::CloudFormation::Init)
+/opt/aws/bin/cfn-init -s {AWS::StackName} -r AppServer \
+  --region {AWS::Region} || error_exit 'Failed to run cfn-init'
+# Update alternatives
+alternatives --set ruby /usr/bin/ruby2.1
+alternatives --set gem /usr/bin/gem2.1
+""",
+            'postamble': """# All is well so signal success
+/opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource AppServer \
+  --region {AWS::Region}
+"""}
     INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
                  'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 'm3.xlarge',
                  'm3.2xlarge']
@@ -263,13 +287,31 @@ class CFTemplate(object):
 
     @staticmethod
     def get_att(resource, attribute):
-        """Apply the 'Fn:GetAtt' function on resource for attribute."""
-        return {'Fn:GetAtt': [resource, attribute]}
+        """Apply the 'Fn::GetAtt' function on resource for attribute."""
+        return {'Fn::GetAtt': [resource, attribute]}
 
     @staticmethod
-    def join(separator, *args):
-        """Apply the 'Fn:Join' function to args using separator."""
-        return {'Fn:Join': [separator, args]}
+    def get_ref(resource):
+        """Apply the 'Ref' function for resource."""
+        return {'Ref': resource}
+
+    @staticmethod
+    def join(*args):
+        """Apply the 'Fn::Join' function to args using separator."""
+        return {'Fn::Join': ['', args]}
+
+    @staticmethod
+    def join_format(string):
+        """Convert formatted strings into the cloudformation join format."""
+        retval = []
+        for item in Formatter().parse(string):
+            if item[0]:
+                retval.append(item[0])
+            if item[1]:
+                retval.append({'Ref': item[1]})
+                if item[2]:  # Correct the string when '::' is used
+                    retval[-1]['Ref'] += ':' + item[2]
+        return retval
 
     def __init__(self, app_ami, memcached, multi, passenger):
         """Initialize the CFTemplate class.
@@ -289,6 +331,38 @@ class CFTemplate(object):
         self.multi = multi
         self.passenger = passenger
         self.template = copy.deepcopy(self.TEMPLATE)
+        self.yum_packages = ['gcc-c++', 'git', 'make', 'mysql-devel',
+                             'ruby21-devel']
+        if not multi:
+            self.yum_packages.append('mysql-server')
+
+    def add_apps(self):
+        """Add either a EC2 instanace or autoscaling group."""
+        init = {'files':
+                {'/home/ec2-user/app/config/database.yml': {
+                    'content':
+                    'production\n  adapter: mysql2\n  database: rails_app\n'}},
+                'packages': {'yum': {x: [] for x in self.yum_packages}},
+                'sources': {'/home/ec2-user/app': self.join(
+                    'https://github.com/scalableinternetservices/',
+                    self.get_ref('TeamName'), '/tarball/',
+                    self.get_ref('Branch'))}}
+        if not self.multi:
+            init['services'] = {'sysvinit': {'mysqld':
+                                             {'enabled': True,
+                                              'ensureRunning': True}}}
+        user = self.join(*(self.join_format(self.INIT['preamble']) +
+                           self.join_format(self.INIT['postamble'])))
+        props = {'ImageId': self.ami,
+                 'InstanceType': self.get_ref('AppInstanceType'),
+                 'KeyName': self.get_ref('TeamName'),
+                 'SecurityGroups': [self.get_ref('TeamName')],
+                 'UserData': {'Fn::Base64': user}}
+        self.template['Resources']['AppServer'] = {
+            'CreationPolicy': {'ResourceSignal': {}},
+            'Metadata': {'AWS::CloudFormation::Init': {'config': init}},
+            'Properties': props,
+            'Type': 'AWS::EC2::Instance'}
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -315,7 +389,6 @@ class CFTemplate(object):
 
     def generate(self):
         """Output the generated AWS cloudformation template."""
-
         # Common configuration
         self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
                            default='t1.micro',
@@ -345,12 +418,13 @@ class CFTemplate(object):
         else:
             url = self.get_att('AppServer', 'PublicDnsName')
         self.add_output('URL', 'The URL to the rails application.',
-                        self.join('', 'http://', url))
+                        self.join('http://', url))
+        self.add_apps()
 
         template = json.dumps(self.template, indent=4, separators=(',', ': '),
                               sort_keys=True)
-        print(template)
-        AWS().verify_template(template)
+        if AWS().verify_template(template):
+            print(template)
 
 
 class UTC(tzinfo):
