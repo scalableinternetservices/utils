@@ -26,12 +26,13 @@ configured to work as described above for its corresponding type.
 ## Running your own instance configuration
 
 Add the file `.ec2_initialize` to the root of your application's
-repository. This should contain commands that execute as the root user just
-after to running `rake db:migrate`. An example is provided below:
+repository. This should contain commands that execute as the ec2-user just
+after to running `rake db:migrate`. Commands that require root should be
+prefixed with `sudo`. An example is provided below:
 
 __.ec2_initialize__
 
-    yum install -y ImageMagick
+    sudo yum install -y ImageMagick
     rake db:seed
 
 
