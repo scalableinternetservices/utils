@@ -268,7 +268,7 @@ yum update -y aws-cfn-bootstrap
 # Helper function
 function error_exit {{
     /opt/aws/bin/cfn-signal -e 1 -r "$1" --stack {AWS::StackName} \
-      --resource AppServer --region {AWS::Region}
+      --resource %%RESOURCE%% --region {AWS::Region}
     exit 1
 }}
 # Run cfn-init (see AWS::CloudFormation::Init)
@@ -342,7 +342,7 @@ if [ "{AppInstanceType}" == "t1.micro" ]; then
 fi
 """,
             'postamble': """# All is well so signal success
-/opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource AppServer \
+/opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
   --region {AWS::Region}
 """}
     INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
@@ -372,6 +372,11 @@ fi
     def get_att(resource, attribute):
         """Apply the 'Fn::GetAtt' function on resource for attribute."""
         return {'Fn::GetAtt': [resource, attribute]}
+
+    @staticmethod
+    def get_map(mapping, key, value):
+        """Apply the 'Fn::FindInMap' function."""
+        return {'Fn::FindInMap': [mapping, key, value]}
 
     @staticmethod
     def get_ref(resource):
@@ -432,6 +437,7 @@ fi
         if test:
             name_parts.append('Test')
         self.name = ''.join(name_parts)
+        self.create_timeout = 'PT15M' if passenger and not app_ami else 'PT5M'
 
     def add_apps(self):
         """Add either a EC2 instanace or autoscaling group."""
@@ -447,39 +453,48 @@ fi
         perms = {'commands': {'update_permissions':
                               {'command': 'chown -R ec2-user:ec2-user .',
                                'cwd': '/home/ec2-user/'}}}
+
+        db_yml = 'production:\n  adapter: mysql2\n  database: rails_app\n'
+        if self.multi:
+            db_yml = self.join(db_yml, '  host: ',
+                               self.get_att('Database', 'Endpoint.Address'),
+                               '\n  password: password\n')
         user = {'files':
                 {'/home/ec2-user/app/config/database.yml': {
-                    'content':
-                    'production:\n  adapter: mysql2\n  database: rails_app\n',
-                    'group': 'ec2-user',
+                    'content': db_yml, 'group': 'ec2-user',
                     'owner': 'ec2-user'}}}
+
         sections = ['preamble', 'rails']
-        create_timeout = 'PT5M'
         if self.passenger:
             if self.ami != self.DEFAULT_AMI:
                 print('WARN: Ensure {0} has passenger pre-built for the '
                       'ec2-user account'.format(self.ami))
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
-                create_timeout = 'PT15M'
             sections.append('passenger')
         else:
             sections.append('webrick')
         sections.append('postamble')
-        data = self.join(*(item for section in sections
-                           for item in self.join_format(self.INIT[section])))
+        resource = 'AppGroup' if self.multi else 'AppServer'
+        data = self.join(*(
+            item for section in sections for item in self.join_format(
+                self.INIT[section].replace('%%RESOURCE%%', resource))))
         props = {'ImageId': self.ami,
                  'InstanceType': self.get_ref('AppInstanceType'),
                  'KeyName': self.get_ref('TeamName'),
                  'SecurityGroups': [self.get_ref('TeamName')],
                  'UserData': {'Fn::Base64': data}}
+        atype = ('AWS::AutoScaling::LaunchConfiguration' if self.multi
+                 else 'AWS::EC2::Instance')
         self.template['Resources']['AppServer'] = {
-            'CreationPolicy': {'ResourceSignal': {'Timeout': create_timeout}},
             'Metadata': {'AWS::CloudFormation::Init': {
                 'configSets': {'default': ['root', 'perms', 'user']},
                 'root': root, 'perms': perms, 'user': user}},
-            'Properties': props,
-            'Type': 'AWS::EC2::Instance'}
+            'Properties': props, 'Type': atype}
+        if not self.multi:
+            self.template['Resources']['AppServer']['CreationPolicy'] =  {
+                'ResourceSignal': {'Timeout': self.create_timeout}}
+
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -532,6 +547,42 @@ fi
                                error_msg=('Must be a valid db.t1, db.m1, or '
                                           'db.m2 EC2 instance type.'))
             self.template['Mappings'] = {'Teams': self.TEAM_MAP}
+            self.template['Resources']['AppGroup'] = {
+                'CreationPolicy': {'ResourceSignal': {
+                    'Count': self.get_ref('AppInstances'),
+                    'Timeout': self.create_timeout}},
+                'Properties': {
+                    'AvailabilityZones': {'Fn::GetAZs': ''},
+                    'LaunchConfigurationName':
+                    self.get_ref('AppServer'),
+                    'LoadBalancerNames': [self.get_ref('LoadBalancer')],
+                    'MaxSize': self.get_ref('AppInstances'),
+                    'MinSize': self.get_ref('AppInstances')},
+                'Type': 'AWS::AutoScaling::AutoScalingGroup'}
+            self.template['Resources']['Database'] = {
+                'Properties': {
+                    'AllocatedStorage': 5,
+                    'BackupRetentionPeriod': 0,
+                    'DBInstanceClass': self.get_ref('DBInstanceType'),
+                    'DBInstanceIdentifier': self.get_ref('AWS::StackName'),
+                    'DBName': 'rails_app',
+                    'Engine': 'mysql',
+                    'MasterUsername': 'root',
+                    'MasterUserPassword': 'password',
+                    'VPCSecurityGroups': [self.get_map(
+                        'Teams', self.get_ref('TeamName'), 'sg')]},
+                'Type': 'AWS::RDS::DBInstance'}
+            self.template['Resources']['LoadBalancer'] = {
+                'Properties': {
+                    'AvailabilityZones': {'Fn::GetAZs': ''},
+                    'LBCookieStickinessPolicy': [
+                        {'PolicyName': 'CookiePolicy',
+                         'CookieExpirationPeriod': 30}],
+                    'LoadBalancerName': self.get_ref('AWS::StackName'),
+                    'Listeners': [{'InstancePort': 80, 'LoadBalancerPort': 80,
+                                   'PolicyNames': ['CookiePolicy'],
+                                   'Protocol': 'http'}]},
+                'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
         else:
             url = self.get_att('AppServer', 'PublicDnsName')
         self.add_output('URL', 'The URL to the rails application.',
