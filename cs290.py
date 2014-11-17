@@ -275,9 +275,50 @@ function error_exit {{
 # Run cfn-init (see AWS::CloudFormation::Init)
 /opt/aws/bin/cfn-init -s {AWS::StackName} -r AppServer \
   --region {AWS::Region} || error_exit 'Failed to run cfn-init'
-# Update alternatives
+""",
+            'rails': """# Update alternatives
 alternatives --set ruby /usr/bin/ruby2.1
 alternatives --set gem /usr/bin/gem2.1
+# Install bundler only after the alternatives have been set.
+gem install bundle
+# Change to the app directory
+cd /home/ec2-user/app
+
+# Add environment variables to ec2-user's .bashrc
+echo "export RAILS_ENV=production" >> ../.bashrc
+echo "export SECRET_KEY_BASE=b801783afb83bb8e614b32ccf6c05c855a927116d92062a75\
+c6ffa61d58c58e62f13eb60cf1a31922c44b7e6a3e8f1809934a93llask938bl" >> ../.bashrc
+echo "export PATH=/usr/local/bin:\$PATH" >> ../.bashrc
+
+# Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
+
+# Don't require tty to run sudo (the remaining commands)
+sed -i 's/requiretty/!requiretty/' /etc/sudoers
+
+# Run the remaining commands as the ec2-user in the app directory
+sudo -u ec2-user bash -lc "bundle install --without test development"\
+ || error_exit 'Failed to install bundle'
+sudo -u ec2-user bash -lc "rake db:create db:migrate"\
+ || error_exit 'Failed to execute database migration'
+# Run the app specific ec2 initialization
+if [ -f .ec2_initialize ]; then
+    sudo -u ec2-user bash -l .ec2_initialize\
+     || error_exit 'Failed to run .ec2_initialize'
+fi
+# Fix multi_json gem version (>1.7.8 has issues precompiling assets)
+echo -e "\ngem 'multi_json', '1.7.8'" >> Gemfile
+sudo -u ec2-user bash -lc "bundle update multi_json"\
+ || error_exit 'Failed to update multi_json'
+# Generate static assets
+sudo -u ec2-user bash -lc "rake assets:precompile"\
+ || error_exit 'Failed to precompile static assets'
+# Configure the app to serve static assets
+sed -i 's/serve_static_assets = false/serve_static_assets = true/'\
+ config/environments/production.rb
+# Start up WEBrick (or whatever server is installed)
+sudo -u ec2-user bash -lc "rails server -d"\
+ || error_exit 'Failed to start rails server'
 """,
             'postamble': """# All is well so signal success
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource AppServer \
@@ -389,8 +430,10 @@ alternatives --set gem /usr/bin/gem2.1
                     'production:\n  adapter: mysql2\n  database: rails_app\n',
                     'group': 'ec2-user',
                     'owner': 'ec2-user'}}}
-        data = self.join(*(self.join_format(self.INIT['preamble']) +
-                           self.join_format(self.INIT['postamble'])))
+        sections = self.join_format(self.INIT['preamble'])
+        sections.extend(self.join_format(self.INIT['rails']))
+        sections.extend(self.join_format(self.INIT['postamble']))
+        data = self.join(*sections)
         props = {'ImageId': self.ami,
                  'InstanceType': self.get_ref('AppInstanceType'),
                  'KeyName': self.get_ref('TeamName'),
