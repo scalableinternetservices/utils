@@ -4,7 +4,7 @@
 
 Both the app server, and database are located on a single EC2 instance.
 
-* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/2014318MCn-SingleWEBrick.json):
+* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/SingleWEBrick.json):
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.
 * [NGINX +
