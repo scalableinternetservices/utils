@@ -371,29 +371,36 @@ alternatives --set gem /usr/bin/gem2.1
 
     def add_apps(self):
         """Add either a EC2 instanace or autoscaling group."""
-        init = {'files':
-                {'/home/ec2-user/app/config/database.yml': {
-                    'content':
-                    'production\n  adapter: mysql2\n  database: rails_app\n'}},
-                'packages': {'yum': {x: [] for x in self.yum_packages}},
+        root = {'packages': {'yum': {x: [] for x in self.yum_packages}},
                 'sources': {'/home/ec2-user/app': self.join(
                     'https://github.com/scalableinternetservices/',
                     self.get_ref('TeamName'), '/tarball/',
                     self.get_ref('Branch'))}}
         if not self.multi:
-            init['services'] = {'sysvinit': {'mysqld':
+            root['services'] = {'sysvinit': {'mysqld':
                                              {'enabled': True,
                                               'ensureRunning': True}}}
-        user = self.join(*(self.join_format(self.INIT['preamble']) +
+        perms = {'commands': {'update_permissions':
+                              {'command': 'chown -R ec2-user:ec2-user .',
+                               'cwd': '/home/ec2-user/'}}}
+        user = {'files':
+                {'/home/ec2-user/app/config/database.yml': {
+                    'content':
+                    'production:\n  adapter: mysql2\n  database: rails_app\n',
+                    'group': 'ec2-user',
+                    'owner': 'ec2-user'}}}
+        data = self.join(*(self.join_format(self.INIT['preamble']) +
                            self.join_format(self.INIT['postamble'])))
         props = {'ImageId': self.ami,
                  'InstanceType': self.get_ref('AppInstanceType'),
                  'KeyName': self.get_ref('TeamName'),
                  'SecurityGroups': [self.get_ref('TeamName')],
-                 'UserData': {'Fn::Base64': user}}
+                 'UserData': {'Fn::Base64': data}}
         self.template['Resources']['AppServer'] = {
             'CreationPolicy': {'ResourceSignal': {}},
-            'Metadata': {'AWS::CloudFormation::Init': {'config': init}},
+            'Metadata': {'AWS::CloudFormation::Init': {
+                'configSets': {'default': ['root', 'perms', 'user']},
+                'root': root, 'perms': perms, 'user': user}},
             'Properties': props,
             'Type': 'AWS::EC2::Instance'}
 
