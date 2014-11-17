@@ -313,12 +313,34 @@ sudo -u ec2-user bash -lc "bundle update multi_json"\
 # Generate static assets
 sudo -u ec2-user bash -lc "rake assets:precompile"\
  || error_exit 'Failed to precompile static assets'
-# Configure the app to serve static assets
+""",
+            'webrick': """# Configure the app to serve static assets
 sed -i 's/serve_static_assets = false/serve_static_assets = true/'\
  config/environments/production.rb
 # Start up WEBrick (or whatever server is installed)
 sudo -u ec2-user bash -lc "rails server -d"\
  || error_exit 'Failed to start rails server'
+""",
+            'passenger': """# Start passenger
+sudo -u ec2-user bash -lc "passenger start -d --no-compile-runtime"\
+ || error_exit 'Failed to start passenger'
+""",
+            'passenger-install': """# Install Passenger
+gem install passenger || error_exit 'Failed to install passenger gem'
+# Add swap space needed to build passenger if running on t1.micro
+if [ "{AppInstanceType}" == "t1.micro" ]; then
+  dd if=/dev/zero of=/swap bs=1M count=512\
+   || error_exit 'Failed to create swap file'
+  mkswap /swap || error_exit 'Failed to mkswap'
+  swapon /swap || error_exit 'Failed to enable swap'
+fi
+# Build and install passenger
+sudo -u ec2-user bash -lc "passenger start --runtime-check-only"\
+ || error_exit 'Failed to build or install passenger'
+if [ "{AppInstanceType}" == "t1.micro" ]; then
+  swapoff /swap || error_exit 'Failed to disable swap'
+  rm /swap || error_exit 'Failed to delete /swap'
+fi
 """,
             'postamble': """# All is well so signal success
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource AppServer \
@@ -398,6 +420,8 @@ sudo -u ec2-user bash -lc "rails server -d"\
                              'ruby21-devel']
         if not multi:
             self.yum_packages.append('mysql-server')
+        if passenger:
+            self.yum_packages.extend(['libcurl-devel', 'pcre-devel'])
 
         name_parts = []
         name_parts.append('Multi' if multi else 'Single')
@@ -430,10 +454,19 @@ sudo -u ec2-user bash -lc "rails server -d"\
                     'production:\n  adapter: mysql2\n  database: rails_app\n',
                     'group': 'ec2-user',
                     'owner': 'ec2-user'}}}
-        sections = self.join_format(self.INIT['preamble'])
-        sections.extend(self.join_format(self.INIT['rails']))
-        sections.extend(self.join_format(self.INIT['postamble']))
-        data = self.join(*sections)
+        sections = ['preamble', 'rails']
+        if self.passenger:
+            if self.ami != self.DEFAULT_AMI:
+                print('WARN: Ensure {0} has passenger pre-built for the '
+                      'ec2-user account'.format(self.ami))
+            else:  # Template installs passenger (this is slow)
+                sections.append('passenger-install')
+            sections.append('passenger')
+        else:
+            sections.append('webrick')
+        sections.append('postamble')
+        data = self.join(*(item for section in sections
+                           for item in self.join_format(self.INIT[section])))
         props = {'ImageId': self.ami,
                  'InstanceType': self.get_ref('AppInstanceType'),
                  'KeyName': self.get_ref('TeamName'),
