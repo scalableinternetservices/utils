@@ -7,7 +7,8 @@ Usage:
   cs290 aws-cleanup
   cs290 aws-groups
   cs290 aws-purge TEAM
-  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached]
+  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached] \
+[--no-test]
   cs290 gh TEAM USER...
 
 -h --help  show this message
@@ -333,7 +334,7 @@ alternatives --set gem /usr/bin/gem2.1
                     retval[-1]['Ref'] += ':' + item[2]
         return retval
 
-    def __init__(self, app_ami, memcached, multi, passenger):
+    def __init__(self, app_ami, memcached, multi, passenger, test):
         """Initialize the CFTemplate class.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -345,6 +346,7 @@ alternatives --set gem /usr/bin/gem2.1
         :param passenger: (boolean) Use passenger standalone (nginx) as the
             entry-point into each app server rather than `rails s` (WEBrick by
             default).
+        :param test: When true, append 'Test' to generated template name.
         """
         self.ami = app_ami if app_ami else self.DEFAULT_AMI
         self.memcached = memcached
@@ -363,6 +365,8 @@ alternatives --set gem /usr/bin/gem2.1
             name_parts.append('Memcached')
         if app_ami:
             name_parts.append(app_ami)
+        if test:
+            name_parts.append('Test')
         self.name = ''.join(name_parts)
 
     def add_apps(self):
@@ -587,7 +591,8 @@ def main():
     elif args['cftemplate']:
         return CFTemplate(app_ami=args['--app-ami'],
                           memcached=args['--memcached'], multi=args['--multi'],
-                          passenger=args['--passenger']).generate()
+                          passenger=args['--passenger'],
+                          test=not args['--no-test']).generate()
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
