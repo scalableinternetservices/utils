@@ -7,12 +7,11 @@ Usage:
   cs290 aws-cleanup
   cs290 aws-groups
   cs290 aws-purge TEAM
-  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached] \
-[--no-test]
+  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached] [--no-test]
   cs290 gh TEAM USER...
 
 -h --help  show this message
-"""
+"""  # flake8: noqa
 
 from __future__ import print_function
 import copy
@@ -455,12 +454,14 @@ fi
                     'group': 'ec2-user',
                     'owner': 'ec2-user'}}}
         sections = ['preamble', 'rails']
+        create_timeout = 'PT5M'
         if self.passenger:
             if self.ami != self.DEFAULT_AMI:
                 print('WARN: Ensure {0} has passenger pre-built for the '
                       'ec2-user account'.format(self.ami))
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
+                create_timeout = 'PT15M'
             sections.append('passenger')
         else:
             sections.append('webrick')
@@ -473,7 +474,7 @@ fi
                  'SecurityGroups': [self.get_ref('TeamName')],
                  'UserData': {'Fn::Base64': data}}
         self.template['Resources']['AppServer'] = {
-            'CreationPolicy': {'ResourceSignal': {}},
+            'CreationPolicy': {'ResourceSignal': {'Timeout': create_timeout}},
             'Metadata': {'AWS::CloudFormation::Init': {
                 'configSets': {'default': ['root', 'perms', 'user']},
                 'root': root, 'perms': perms, 'user': user}},
