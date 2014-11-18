@@ -7,7 +7,8 @@ Usage:
   cs290 aws-cleanup
   cs290 aws-groups
   cs290 aws-purge TEAM
-  cs290 cftemplate [--app-ami=ami] [--multi] [--passenger] [--memcached] [--no-test]
+  cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
+  cs290 cftemplate funkload [--no-test]
   cs290 gh TEAM USER...
 
 -h --help  show this message
@@ -421,59 +422,28 @@ fi
                     retval[-1]['Ref'] += ':' + item[2]
         return retval
 
-    def __init__(self, app_ami, memcached, multi, passenger, test):
+    def __init__(self, test):
         """Initialize the CFTemplate class.
 
-        :param app_ami: (str) The AMI to use for the app server instance(s).
-        :param memcached: (boolean) Template specifies a separate memcached
-            instance.
-        :param multi: (boolean) Template moves the database to its own RDB
-            instance, permits a variable number of app server instances, and
-            distributes load to those instances via ELB.
-        :param passenger: (boolean) Use passenger standalone (nginx) as the
-            entry-point into each app server rather than `rails s` (WEBrick by
-            default).
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = app_ami if app_ami else self.DEFAULT_AMI
-        self.memcached = memcached
-        self.multi = multi
-        self.passenger = passenger
+        self.ami = self.DEFAULT_AMI
+        self.create_timeout = 'PT5M'
         self.template = copy.deepcopy(self.TEMPLATE)
-        self.yum_packages = ['gcc-c++', 'git', 'make', 'mysql-devel',
-                             'ruby21-devel']
-        if not multi:
-            self.yum_packages.append('mysql-server')
-        if passenger:
-            self.yum_packages.extend(['libcurl-devel', 'pcre-devel'])
-
-        name_parts = []
-        name_parts.append('Multi' if multi else 'Single')
-        name_parts.append('Passenger' if passenger else 'WEBrick')
-        if memcached:
-            name_parts.append('Memcached')
-        if app_ami:
-            name_parts.append(app_ami)
-        if test:
-            name_parts.append('Test')
-        self.name = ''.join(name_parts)
-        self.create_timeout = 'PT20M' if passenger and not app_ami else 'PT5M'
+        self.test = test
+        self.yum_packages = []
 
     def add_apps(self):
-        """Add either a EC2 instanace or autoscaling group."""
-        root = {'packages': {'yum': {x: [] for x in self.yum_packages}},
-                'sources': {'/home/ec2-user/app': self.join(
-                    'https://github.com/scalableinternetservices/',
-                    self.get_ref('TeamName'), '/tarball/',
-                    self.get_ref('Branch'))}}
+        """Update either the EC2 instance or autoscaling group."""
+        app = {'sources': {'/home/ec2-user/app': self.join(
+            'https://github.com/scalableinternetservices/',
+            self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
-            root['services'] = {'sysvinit': {'mysqld':
-                                             {'enabled': True,
-                                              'ensureRunning': True}}}
+            app['services'] = {'sysvinit': {'mysqld': {'enabled': True,
+                                                       'ensureRunning': True}}}
         perms = {'commands': {'update_permissions':
                               {'command': 'chown -R ec2-user:ec2-user .',
                                'cwd': '/home/ec2-user/'}}}
-
         db_yml = 'production:\n  adapter: mysql2\n  database: rails_app\n'
         if self.multi:
             db_yml = self.join(db_yml, '  host: ',
@@ -484,37 +454,15 @@ fi
                     'content': db_yml, 'group': 'ec2-user',
                     'owner': 'ec2-user'}}}
 
-        sections = ['preamble', 'rails']
-        if self.passenger:
-            if self.ami != self.DEFAULT_AMI:
-                print('WARN: Ensure {0} has passenger pre-built for the '
-                      'ec2-user account'.format(self.ami))
-            else:  # Template installs passenger (this is slow)
-                sections.append('passenger-install')
-            sections.append('passenger')
+        conf = self.template['Resources']['AppServer']
+        conf['Metadata']['AWS::CloudFormation::Init'].update({
+            'configSets': {'default': ['packages', 'app', 'perms', 'user']},
+            'app': app, 'perms': perms, 'user': user})
+        if self.multi:
+            conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
-            sections.append('webrick')
-        sections.append('postamble')
-        resource = 'AppGroup' if self.multi else 'AppServer'
-        data = self.join(*(
-            item for section in sections for item in self.join_format(
-                self.INIT[section].replace('%%RESOURCE%%', resource))))
-        props = {'ImageId': self.ami,
-                 'InstanceType': self.get_ref('AppInstanceType'),
-                 'KeyName': self.get_ref('TeamName'),
-                 'SecurityGroups': [self.get_ref('TeamName')],
-                 'UserData': {'Fn::Base64': data}}
-        atype = ('AWS::AutoScaling::LaunchConfiguration' if self.multi
-                 else 'AWS::EC2::Instance')
-        self.template['Resources']['AppServer'] = {
-            'Metadata': {'AWS::CloudFormation::Init': {
-                'configSets': {'default': ['root', 'perms', 'user']},
-                'root': root, 'perms': perms, 'user': user}},
-            'Properties': props, 'Type': atype}
-        if not self.multi:
-            self.template['Resources']['AppServer']['CreationPolicy'] =  {
+            conf['CreationPolicy'] = {
                 'ResourceSignal': {'Timeout': self.create_timeout}}
-
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -539,20 +487,10 @@ fi
             param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
-    def generate(self):
-        """Output the generated AWS cloudformation template."""
-        # Common configuration
-        self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
-                           default='t1.micro',
-                           description='The AppServer instance type.',
-                           error_msg=('Must be a valid t1, m1, or m2 EC2 '
-                                      'instance type.'))
+    def callback_stack(self):
+        """Update the template parameters for the stack."""
         self.add_parameter('Branch', default='master',
                            description='The git branch to deploy.')
-        self.add_parameter('TeamName', allowed=self.TEAM_MAP.keys(),
-                           description='Your CS290 team name.',
-                           error_msg=('Must exactly match your team name as '
-                                      'shown in your Github URL.'))
 
         if self.multi:
             url = self.get_att('LoadBalancer', 'DNSName')
@@ -609,15 +547,108 @@ fi
                         self.join('http://', url))
         self.add_apps()
 
-        template = json.dumps(self.template, indent=4, separators=(',', ': '),
+    def generate_funkload(self):
+        """Output the cloudformation template for a funkload instance."""
+        self.name = 'FunkloadTest' if self.test else 'FunkLoad'
+        sections = ['preamble', 'postamble']
+        return self.generate_template(sections, 'AppServer',
+                                      callback=self.callback_funkload)
+
+    def generate_stack(self, app_ami, memcached, multi, passenger):
+        """Output the generated AWS cloudformation template.
+
+        :param app_ami: (str) The AMI to use for the app server instance(s).
+        :param memcached: (boolean) Template specifies a separate memcached
+            instance.
+        :param multi: (boolean) Template moves the database to its own RDB
+            instance, permits a variable number of app server instances, and
+            distributes load to those instances via ELB.
+        :param passenger: (boolean) Use passenger standalone (nginx) as the
+            entry-point into each app server rather than `rails s` (WEBrick by
+            default).
+        """
+        # Update stack specific instance variables
+        if app_ami:
+            self.ami = app_ami
+        self.memcached = memcached
+        self.multi = multi
+        self.passenger = passenger
+        self.yum_packages.extend(['gcc-c++', 'git', 'make', 'mysql-devel',
+                                  'ruby21-devel'])
+        if not multi:
+            self.yum_packages.append('mysql-server')
+        if passenger:
+            self.yum_packages.extend(['libcurl-devel', 'pcre-devel'])
+
+        name_parts = []
+        name_parts.append('Multi' if multi else 'Single')
+        name_parts.append('Passenger' if passenger else 'WEBrick')
+        if memcached:
+            name_parts.append('Memcached')
+        if app_ami:
+            name_parts.append(app_ami)
+        if self.test:
+            name_parts.append('Test')
+        self.name = ''.join(name_parts)
+        if passenger and not app_ami:
+            self.create_timeout = 'PT20M'
+
+        sections = ['preamble', 'rails']
+        if passenger:
+            if app_ami:
+                print('WARN: Ensure {0} has passenger pre-built for the '
+                      'ec2-user account'.format(self.ami))
+            else:  # Template installs passenger (this is slow)
+                sections.append('passenger-install')
+            sections.append('passenger')
+        else:
+            sections.append('webrick')
+        sections.append('postamble')
+        resource = 'AppGroup' if self.multi else 'AppServer'
+        return self.generate_template(sections, resource,
+                                      callback=self.callback_stack)
+
+    def generate_template(self, sections, resource, callback=None):
+        """Generate the common template functionality.
+
+        :param callback: Call the callback function prior to returning if
+            provided.
+
+        """
+        userdata = self.join(*(
+            item for section in sections for item in self.join_format(
+                self.INIT[section].replace('%%RESOURCE%%', resource))))
+        self.template['Resources']['AppServer'] = {
+            'Metadata': {'AWS::CloudFormation::Init': {
+                'packages': {
+                    'packages':{'yum': {x: [] for x in self.yum_packages}}}}},
+            'Properties': {'ImageId': self.ami,
+                           'InstanceType': self.get_ref('AppInstanceType'),
+                           'KeyName': self.get_ref('TeamName'),
+                           'SecurityGroups': [self.get_ref('TeamName')],
+                           'UserData': {'Fn::Base64': userdata}},
+            'Type': 'AWS::EC2::Instance'}
+        self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
+                           default='t1.micro',
+                           description='The AppServer instance type.',
+                           error_msg=('Must be a valid t1, m1, or m2 EC2 '
+                                      'instance type.'))
+        self.add_parameter('TeamName', allowed=self.TEAM_MAP.keys(),
+                           description='Your CS290 team name.',
+                           error_msg=('Must exactly match your team name '
+                                      'as shown in your Github URL.'))
+        if callback:
+            callback()
+        template = json.dumps(self.template, indent=4,
+                              separators=(',', ': '),
                               sort_keys=True)
-        retval = AWS().verify_template(template, (self.TEMPLATE_BUCKET,
-                                                  self.name + '.json'))
-        if retval:
-            if isinstance(retval, bool):
+        tmp = AWS().verify_template(template, (self.TEMPLATE_BUCKET,
+                                               self.name + '.json'))
+        if tmp:
+            if isinstance(self, bool):
                 print(template)
             else:
-                print(retval)
+                print(tmp)
 
 
 class UTC(tzinfo):
@@ -744,10 +775,14 @@ def main():
     elif args['aws-purge']:
         return AWS().purge(args['TEAM'])
     elif args['cftemplate']:
-        return CFTemplate(app_ami=args['--app-ami'],
-                          memcached=args['--memcached'], multi=args['--multi'],
-                          passenger=args['--passenger'],
-                          test=not args['--no-test']).generate()
+        cf = CFTemplate(test=not args['--no-test'])
+        if args['funkload']:
+            return cf.generate_funkload()
+        else:
+            return cf.generate_stack(app_ami=args['--app-ami'],
+                                     memcached=args['--memcached'],
+                                     multi=args['--multi'],
+                                     passenger=args['--passenger'])
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
