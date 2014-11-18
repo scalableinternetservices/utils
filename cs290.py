@@ -283,6 +283,17 @@ function error_exit {{
 # Run cfn-init (see AWS::CloudFormation::Init)
 /opt/aws/bin/cfn-init -s {AWS::StackName} -r AppServer \
   --region {AWS::Region} || error_exit 'Failed to run cfn-init'
+# Don't require tty to run sudo
+sed -i 's/requiretty/!requiretty/' /etc/sudoers
+""",
+            'funkload': """# Install python2.7 environment
+easy_install pip || error_exit 'Failure installing pip'
+pip install virtualenv || error_exit 'Failure installing virtualenv'
+sudo -u ec2-user bash -lc "virtualenv ~/.py27 -p /usr/bin/python27"\
+ || error_exit 'Error creating py27 virtualenv'
+echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
+sudo -u ec2-user bash -lc "pip install funkload"\
+ || error_exit 'Error installing funkload'
 """,
             'rails': """# Update alternatives
 alternatives --set ruby /usr/bin/ruby2.1
@@ -300,9 +311,6 @@ echo "export PATH=/usr/local/bin:\$PATH" >> ../.bashrc
 
 # Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
 iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
-
-# Don't require tty to run sudo (the remaining commands)
-sed -i 's/requiretty/!requiretty/' /etc/sudoers
 
 # Run the remaining commands as the ec2-user in the app directory
 sudo -u ec2-user bash -lc "bundle install --without test development"\
@@ -487,6 +495,11 @@ fi
             param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
+    def callback_funkload(self):
+        """Update the template parameters for funkload."""
+        conf = self.template['Resources']['AppServer']['CreationPolicy'] = {
+            'ResourceSignal': {'Timeout': self.create_timeout}}
+
     def callback_stack(self):
         """Update the template parameters for the stack."""
         self.add_parameter('Branch', default='master',
@@ -550,9 +563,13 @@ fi
     def generate_funkload(self):
         """Output the cloudformation template for a funkload instance."""
         self.name = 'FunkloadTest' if self.test else 'FunkLoad'
-        sections = ['preamble', 'postamble']
+        self.yum_packages.append('python27')
+        sections = ['preamble', 'funkload', 'postamble']
+        self.add_output('SSH', 'SSH connection string', self.join(
+            'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
+            self.get_att('AppServer', 'PublicDnsName')))
         return self.generate_template(sections, 'AppServer',
-                                      callback=self.callback_funkload)
+                                      self.callback_funkload)
 
     def generate_stack(self, app_ami, memcached, multi, passenger):
         """Output the generated AWS cloudformation template.
@@ -620,6 +637,7 @@ fi
                 self.INIT[section].replace('%%RESOURCE%%', resource))))
         self.template['Resources']['AppServer'] = {
             'Metadata': {'AWS::CloudFormation::Init': {
+                'configSets': {'default': ['packages']},
                 'packages': {
                     'packages':{'yum': {x: [] for x in self.yum_packages}}}}},
             'Properties': {'ImageId': self.ami,
