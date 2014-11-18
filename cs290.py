@@ -298,8 +298,20 @@ sed -i 's/requiretty/!requiretty/' /etc/sudoers
 # Run the remaining commands as the ec2-user in the app directory
 sudo -u ec2-user bash -lc "bundle install --without test development"\
  || error_exit 'Failed to install bundle'
-sudo -u ec2-user bash -lc "rake db:create db:migrate"\
- || error_exit 'Failed to execute database migration'
+# Create the database and run the migrations (try up to 10x)
+loop=10
+while [ $loop -gt 0]; do
+  sudo -u ec2-user bash -lc "rake db:create db:migrate
+  if [ $? -eq 0 ]; then
+    loop=-1
+  else
+    sleep 6
+    loop=$(expr $loop - 1)
+  fi
+done
+if [ $loop -eq 0 ]; then
+  error_exit 'Failed to execute database migration'
+fi
 # Run the app specific ec2 initialization
 if [ -f .ec2_initialize ]; then
     sudo -u ec2-user bash -l .ec2_initialize\
@@ -366,7 +378,7 @@ fi
                 'Parameters': {},
                 'Resources': {}}
     # Update this bucket on a per-class-account basis
-    TEMPLATE_BUCKET = 'cf-templates-11antn0uuzgzy-us-west-2'
+    TEMPLATE_BUCKET = 'cs290'
 
     @staticmethod
     def get_att(resource, attribute):
@@ -437,7 +449,7 @@ fi
         if test:
             name_parts.append('Test')
         self.name = ''.join(name_parts)
-        self.create_timeout = 'PT15M' if passenger and not app_ami else 'PT5M'
+        self.create_timeout = 'PT20M' if passenger and not app_ami else 'PT5M'
 
     def add_apps(self):
         """Add either a EC2 instanace or autoscaling group."""

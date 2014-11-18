@@ -4,15 +4,14 @@
 
 Both the app server, and database are located on a single EC2 instance.
 
-* [WEBrick
-  (https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/SingleWEBrick.json)](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/SingleWEBrick.json):
-  WEBrick handles requests to port 80 directly, permitting only a single
-  connection at a time.
-* [NGINX + Passenger
-  (https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/SinglePassenger.json
-  )](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/SinglePassenger.json):
+* __WEBrick__:  
+  WEBrick handles requests to port 80 directly, permitting onl/y a single
+  connection at a time.  
+  https://s3-us-west-2.amazonaws.com/cs290/SingleWEBrick.json
+* __NGINX + Passenger__:  
   NGINX handles requests to port 80 and passes connections to instances of the
-  app through Passenger. Multiple concurrent connections are supported.
+  app through Passenger. Multiple concurrent connections are supported.  
+  https://s3-us-west-2.amazonaws.com/cs290/SinglePassenger.json
 
 
 ## Multiple Instance Templates
@@ -21,8 +20,10 @@ These templates launch stacks where a load balancer (ELB) distributes requests
 across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
-* [WEBrick](https://s3-us-west-2.amazonaws.com/cf-templates-11antn0uuzgzy-us-west-2/20143188jS-LoadBalancedWEBrick.json)
-* NGINX + Passenger: Coming soon
+* __WEBrick__:  
+  https://s3-us-west-2.amazonaws.com/cs290/MultiWEBrick.json
+* __NGINX + Passenger__:  
+  https://s3-us-west-2.amazonaws.com/cs290/MultiPassenger.json
 
 
 ## Running your own instance configuration
