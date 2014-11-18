@@ -48,12 +48,14 @@ class AWS(object):
                            'cloudwatch:DescribeAlarms',
                            'cloudwatch:GetMetricStatistics',
                            'elasticloadbalancing:Describe*', 'rds:Describe*',
-                           'rds:ListTagsForResource', 's3:Get*',
-                           's3:PutObject', 'sts:DecodeAuthorizationMessage'],
+                           'rds:ListTagsForResource',
+                           'sts:DecodeAuthorizationMessage'],
                 'Effect': 'Allow', 'Resource': '*'},
                {'Action': ['ec2:Describe*'],
                 'Condition': {'StringEquals': {'ec2:Region': REGION}},
-                'Effect': 'Allow', 'Resource': '*'}]}
+                'Effect': 'Allow', 'Resource': '*'},
+               {'Action': ['s3:Get*', 's3:Put*'], 'Effect': 'Allow',
+                'Resource': 'arn:aws:s3:::cf-templates*{0}*'.format(REGION)}]}
     GROUP = 'cs290'
     PROFILE = 'admin'
 
@@ -176,6 +178,12 @@ class AWS(object):
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
                           AWS.ARNEC2.format('volume/*')]})
+        # Allow full access to cs290/TEAM in S3
+        policy['Statement'].extend([
+            {'Action': '*', 'Effect': 'Allow',
+             'Resource': 'arn:aws:s3:::cs290/{0}/*'.format(team)},
+            {'Action': 's3:ListBucket', 'Effect': 'Allow',
+             'Resource': 'arn:aws:s3:::cs290'}])
         # Filter the EC2 instances types that are allowed to be started
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
