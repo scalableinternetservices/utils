@@ -5,7 +5,7 @@
 Both the app server, and database are located on a single EC2 instance.
 
 * __WEBrick__:  
-  WEBrick handles requests to port 80 directly, permitting onl/y a single
+  WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
   https://s3-us-west-2.amazonaws.com/cs290/SingleWEBrick.json
 * __NGINX + Passenger__:  
@@ -24,6 +24,13 @@ configured to work as described above for its corresponding type.
   https://s3-us-west-2.amazonaws.com/cs290/MultiWEBrick.json
 * __NGINX + Passenger__:  
   https://s3-us-west-2.amazonaws.com/cs290/MultiPassenger.json
+
+## Other Templates
+
+* __FunkLoad__:  
+  This instance provides an installed version of funkload at your disposal. You
+  will need to copy/rsync over your funkload tests.  
+  https://s3-us-west-2.amazonaws.com/cs290/FunkLoad.json
 
 
 ## Running your own instance configuration
