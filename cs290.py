@@ -248,7 +248,7 @@ class AWS(object):
         bucket, key = upload
         s3 = self.get_service('s3', None)
         retval = self.op(s3, 'PutObject', Bucket=bucket, Key=key,
-                         Body=template, debug_output=False)
+                         Body=template, acl='public-read', debug_output=False)
         if not retval:
             return retval
         return '{host}/{bucket}/{key}'.format(
