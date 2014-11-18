@@ -563,7 +563,7 @@ fi
     def generate_funkload(self):
         """Output the cloudformation template for a funkload instance."""
         self.name = 'FunkloadTest' if self.test else 'FunkLoad'
-        self.yum_packages.append('python27')
+        self.yum_packages.extend(['gnuplot', 'python27'])
         sections = ['preamble', 'funkload', 'postamble']
         self.add_output('SSH', 'SSH connection string', self.join(
             'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
