@@ -308,8 +308,8 @@ sudo -u ec2-user bash -lc "bundle install --without test development"\
  || error_exit 'Failed to install bundle'
 # Create the database and run the migrations (try up to 10x)
 loop=10
-while [ $loop -gt 0]; do
-  sudo -u ec2-user bash -lc "rake db:create db:migrate
+while [ $loop -gt 0 ]; do
+  sudo -u ec2-user bash -lc "rake db:create db:migrate"
   if [ $? -eq 0 ]; then
     loop=-1
   else
