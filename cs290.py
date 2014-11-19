@@ -9,6 +9,7 @@ Usage:
   cs290 aws-purge TEAM
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
+  cs290 cftemplate passenger-ami
   cs290 gh TEAM USER...
 
 -h --help  show this message
@@ -284,7 +285,7 @@ function error_exit {{
 /opt/aws/bin/cfn-init -s {AWS::StackName} -r AppServer \
   --region {AWS::Region} || error_exit 'Failed to run cfn-init'
 # Don't require tty to run sudo
-sed -i 's/requiretty/!requiretty/' /etc/sudoers
+sed -i 's/ requiretty/ !requiretty/' /etc/sudoers
 """,
             'funkload': """# Install python2.7 environment
 easy_install pip || error_exit 'Failure installing pip'
@@ -295,14 +296,14 @@ echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
 sudo -u ec2-user bash -lc "pip install funkload"\
  || error_exit 'Error installing funkload'
 """,
-            'rails': """# Update alternatives
+            'ruby': """# Update alternatives
 alternatives --set ruby /usr/bin/ruby2.1
 alternatives --set gem /usr/bin/gem2.1
 # Install bundler only after the alternatives have been set.
 gem install bundle
-# Change to the app directory
+""",
+            'rails': """# Change to the app directory
 cd /home/ec2-user/app
-
 # Add environment variables to ec2-user's .bashrc
 echo "export RAILS_ENV=production" >> ../.bashrc
 echo "export SECRET_KEY_BASE=b801783afb83bb8e614b32ccf6c05c855a927116d92062a75\
@@ -363,7 +364,7 @@ if [ "{AppInstanceType}" == "t1.micro" ]; then
   swapon /swap || error_exit 'Failed to enable swap'
 fi
 # Build and install passenger
-sudo -u ec2-user bash -lc "passenger start --runtime-check-only"\
+sudo -u ec2-user bash -lc "/usr/local/bin/passenger start --runtime-check-only"\
  || error_exit 'Failed to build or install passenger'
 if [ "{AppInstanceType}" == "t1.micro" ]; then
   swapoff /swap || error_exit 'Failed to disable swap'
@@ -495,8 +496,13 @@ fi
             param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
-    def callback_funkload(self):
-        """Update the template parameters for funkload."""
+    def add_ssh_output(self):
+        self.add_output('SSH', 'SSH connection string', self.join(
+            'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
+            self.get_att('AppServer', 'PublicDnsName')))
+
+    def callback_single_server(self):
+        """Update the template parameters for a single-server instance."""
         conf = self.template['Resources']['AppServer']['CreationPolicy'] = {
             'ResourceSignal': {'Timeout': self.create_timeout}}
 
@@ -556,20 +562,38 @@ fi
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
         else:
             url = self.get_att('AppServer', 'PublicDnsName')
+            self.add_ssh_output()
         self.add_output('URL', 'The URL to the rails application.',
                         self.join('http://', url))
         self.add_apps()
 
     def generate_funkload(self):
         """Output the cloudformation template for a funkload instance."""
-        self.name = 'FunkloadTest' if self.test else 'FunkLoad'
+        self.name = 'FunkLoad'
         self.yum_packages.extend(['gnuplot', 'python27'])
         sections = ['preamble', 'funkload', 'postamble']
-        self.add_output('SSH', 'SSH connection string', self.join(
-            'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att('AppServer', 'PublicDnsName')))
+        self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
-                                      self.callback_funkload)
+                                      self.callback_single_server)
+
+    def generate_passenger_ami(self):
+        """Output the template used to create an up-to-date passenger AMI."""
+        self.name = 'PassengerAMI'
+        self.yum_packages.extend(['gcc-c++', 'libcurl-devel', 'make',
+                                  'pcre-devel'])
+        sections = ['preamble', 'ruby', 'passenger-install', 'postamble']
+        self.add_ssh_output()
+        clean = ['sudo yum clean all',
+                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
+                  '{} \;'),
+                 'sudo rm -f /root/.ssh/authorized_keys',
+                 'sudo rm -f /root/.bash_history',
+                 'rm -f /home/ec2-user/.ssh/authorized_keys',
+                 'rm -f /home/ec2-user/.bash_history']
+        self.add_output('Cleanup', 'Commands to run before making snapshot',
+                        '; '.join(clean))
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
 
     def generate_stack(self, app_ami, memcached, multi, passenger):
         """Output the generated AWS cloudformation template.
@@ -594,7 +618,7 @@ fi
                                   'ruby21-devel'])
         if not multi:
             self.yum_packages.append('mysql-server')
-        if passenger:
+        if passenger and not app_ami:
             self.yum_packages.extend(['libcurl-devel', 'pcre-devel'])
 
         name_parts = []
@@ -604,13 +628,11 @@ fi
             name_parts.append('Memcached')
         if app_ami:
             name_parts.append(app_ami)
-        if self.test:
-            name_parts.append('Test')
         self.name = ''.join(name_parts)
         if passenger and not app_ami:
             self.create_timeout = 'PT20M'
 
-        sections = ['preamble', 'rails']
+        sections = ['preamble', 'ruby', 'rails']
         if passenger:
             if app_ami:
                 print('WARN: Ensure {0} has passenger pre-built for the '
@@ -660,6 +682,8 @@ fi
         template = json.dumps(self.template, indent=4,
                               separators=(',', ': '),
                               sort_keys=True)
+        if self.test:
+            self.name += 'Test'
         tmp = AWS().verify_template(template, (self.TEMPLATE_BUCKET,
                                                self.name + '.json'))
         if tmp:
@@ -796,6 +820,8 @@ def main():
         cf = CFTemplate(test=not args['--no-test'])
         if args['funkload']:
             return cf.generate_funkload()
+        elif args['passenger-ami']:
+            return cf.generate_passenger_ami()
         else:
             return cf.generate_stack(app_ami=args['--app-ami'],
                                      memcached=args['--memcached'],
