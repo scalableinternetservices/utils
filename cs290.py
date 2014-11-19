@@ -13,7 +13,7 @@ Usage:
   cs290 gh TEAM USER...
 
 -h --help  show this message
-"""  # flake8: noqa
+"""  # NOQA
 
 from __future__ import print_function
 import copy
@@ -286,21 +286,25 @@ function error_exit {{
   --region {AWS::Region} || error_exit 'Failed to run cfn-init'
 # Don't require tty to run sudo
 sed -i 's/ requiretty/ !requiretty/' /etc/sudoers
+function user_sudo {{
+    sudo -u ec2-user bash -lc "$*"
+}}
 """,
             'funkload': """# Install python2.7 environment
 easy_install pip || error_exit 'Failure installing pip'
 pip install virtualenv || error_exit 'Failure installing virtualenv'
-sudo -u ec2-user bash -lc "virtualenv ~/.py27 -p /usr/bin/python27"\
+user_sudo virtualenv ~/.py27 -p /usr/bin/python27\
  || error_exit 'Error creating py27 virtualenv'
 echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
-sudo -u ec2-user bash -lc "pip install funkload"\
+user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
             'ruby': """# Update alternatives
-alternatives --set ruby /usr/bin/ruby2.1
-alternatives --set gem /usr/bin/gem2.1
+alternatives --set ruby /usr/bin/ruby2.1 || error_exit 'Failed ruby2.1 default'
 # Install bundler only after the alternatives have been set.
-gem install bundle
+gem install bundle || error_exit 'Failed to install bundle'
+# Update user's path if it hasn't been set already
+echo "export PATH=/usr/local/bin:\$PATH" >> /home/ec2-user/.bashrc
 """,
             'rails': """# Change to the app directory
 cd /home/ec2-user/app
@@ -308,18 +312,17 @@ cd /home/ec2-user/app
 echo "export RAILS_ENV=production" >> ../.bashrc
 echo "export SECRET_KEY_BASE=b801783afb83bb8e614b32ccf6c05c855a927116d92062a75\
 c6ffa61d58c58e62f13eb60cf1a31922c44b7e6a3e8f1809934a93llask938bl" >> ../.bashrc
-echo "export PATH=/usr/local/bin:\$PATH" >> ../.bashrc
 
 # Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
 iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
 
 # Run the remaining commands as the ec2-user in the app directory
-sudo -u ec2-user bash -lc "bundle install --without test development"\
+user_sudo bundle install --without test development\
  || error_exit 'Failed to install bundle'
 # Create the database and run the migrations (try up to 10x)
 loop=10
 while [ $loop -gt 0 ]; do
-  sudo -u ec2-user bash -lc "rake db:create db:migrate"
+  user_sudo rake db:create db:migrate
   if [ $? -eq 0 ]; then
     loop=-1
   else
@@ -337,25 +340,23 @@ if [ -f .ec2_initialize ]; then
 fi
 # Fix multi_json gem version (>1.7.8 has issues precompiling assets)
 echo -e "\ngem 'multi_json', '1.7.8'" >> Gemfile
-sudo -u ec2-user bash -lc "bundle update multi_json"\
- || error_exit 'Failed to update multi_json'
+user_sudo bundle update multi_json || error_exit 'Failed to update multi_json'
 # Generate static assets
-sudo -u ec2-user bash -lc "rake assets:precompile"\
+user_sudo rake assets:precompile\
  || error_exit 'Failed to precompile static assets'
 """,
             'webrick': """# Configure the app to serve static assets
 sed -i 's/serve_static_assets = false/serve_static_assets = true/'\
  config/environments/production.rb
 # Start up WEBrick (or whatever server is installed)
-sudo -u ec2-user bash -lc "rails server -d"\
- || error_exit 'Failed to start rails server'
+user_sudo rails server -d || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
-sudo -u ec2-user bash -lc "passenger start -d --no-compile-runtime"\
+user_sudo passenger start -d --no-compile-runtime\
  || error_exit 'Failed to start passenger'
 """,
             'passenger-install': """# Install Passenger
-gem install passenger || error_exit 'Failed to install passenger gem'
+gem install passenger rake || error_exit 'Failed to install passenger gems'
 # Add swap space needed to build passenger if running on t1.micro
 if [ "{AppInstanceType}" == "t1.micro" ]; then
   dd if=/dev/zero of=/swap bs=1M count=512\
@@ -364,7 +365,7 @@ if [ "{AppInstanceType}" == "t1.micro" ]; then
   swapon /swap || error_exit 'Failed to enable swap'
 fi
 # Build and install passenger
-sudo -u ec2-user bash -lc "/usr/local/bin/passenger start --runtime-check-only"\
+user_sudo /usr/local/bin/passenger start --runtime-check-only\
  || error_exit 'Failed to build or install passenger'
 if [ "{AppInstanceType}" == "t1.micro" ]; then
   swapoff /swap || error_exit 'Failed to disable swap'
@@ -378,6 +379,11 @@ fi
     INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
                  'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 'm3.xlarge',
                  'm3.2xlarge']
+    PACKAGES = {'funkload': {'gnuplot', 'python27'},
+                'passenger': {'gcc-c++', 'libcurl-devel', 'make',
+                              'openssl-devel', 'pcre-devel', 'ruby21-devel'},
+                'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
+                          'ruby21-devel'}}
     # Update this value periodically from the `cs290 aws-groups` output.
     TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
                 'Compete': {'sg': 'sg-d33052b6'},
@@ -440,7 +446,7 @@ fi
         self.create_timeout = 'PT5M'
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
-        self.yum_packages = []
+        self.yum_packages = None
 
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
@@ -497,13 +503,14 @@ fi
         self.template['Parameters'][name] = param
 
     def add_ssh_output(self):
+        """Output the SSH connection string."""
         self.add_output('SSH', 'SSH connection string', self.join(
             'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
             self.get_att('AppServer', 'PublicDnsName')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
-        conf = self.template['Resources']['AppServer']['CreationPolicy'] = {
+        self.template['Resources']['AppServer']['CreationPolicy'] = {
             'ResourceSignal': {'Timeout': self.create_timeout}}
 
     def callback_stack(self):
@@ -570,7 +577,7 @@ fi
     def generate_funkload(self):
         """Output the cloudformation template for a funkload instance."""
         self.name = 'FunkLoad'
-        self.yum_packages.extend(['gnuplot', 'python27'])
+        self.yum_packages = self.PACKAGES['funkload']
         sections = ['preamble', 'funkload', 'postamble']
         self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
@@ -579,8 +586,9 @@ fi
     def generate_passenger_ami(self):
         """Output the template used to create an up-to-date passenger AMI."""
         self.name = 'PassengerAMI'
-        self.yum_packages.extend(['gcc-c++', 'libcurl-devel', 'make',
-                                  'pcre-devel'])
+        self.create_timeout = 'PT20M'
+        self.test = False
+        self.yum_packages = self.PACKAGES['passenger']
         sections = ['preamble', 'ruby', 'passenger-install', 'postamble']
         self.add_ssh_output()
         clean = ['sudo yum clean all',
@@ -614,20 +622,18 @@ fi
         self.memcached = memcached
         self.multi = multi
         self.passenger = passenger
-        self.yum_packages.extend(['gcc-c++', 'git', 'make', 'mysql-devel',
-                                  'ruby21-devel'])
+        self.yum_packages = self.PACKAGES['stack']
         if not multi:
-            self.yum_packages.append('mysql-server')
+            self.yum_packages.add('mysql-server')
         if passenger and not app_ami:
-            self.yum_packages.extend(['libcurl-devel', 'pcre-devel'])
-
+            self.yum_packages |= self.PACKAGES['passenger']
         name_parts = []
         name_parts.append('Multi' if multi else 'Single')
         name_parts.append('Passenger' if passenger else 'WEBrick')
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
-            name_parts.append(app_ami)
+            name_parts.append('-' + app_ami)
         self.name = ''.join(name_parts)
         if passenger and not app_ami:
             self.create_timeout = 'PT20M'
@@ -637,6 +643,7 @@ fi
             if app_ami:
                 print('WARN: Ensure {0} has passenger pre-built for the '
                       'ec2-user account'.format(self.ami))
+                sections.remove('ruby')  # These actions have already occured.
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
             sections.append('passenger')
@@ -661,7 +668,7 @@ fi
             'Metadata': {'AWS::CloudFormation::Init': {
                 'configSets': {'default': ['packages']},
                 'packages': {
-                    'packages':{'yum': {x: [] for x in self.yum_packages}}}}},
+                    'packages': {'yum': {x: [] for x in self.yum_packages}}}}},
             'Properties': {'ImageId': self.ami,
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),

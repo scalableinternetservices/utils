@@ -11,7 +11,7 @@ Both the app server, and database are located on a single EC2 instance.
 * __NGINX + Passenger__:  
   NGINX handles requests to port 80 and passes connections to instances of the
   app through Passenger. Multiple concurrent connections are supported.  
-  https://s3-us-west-2.amazonaws.com/cs290/SinglePassenger.json
+  https://s3-us-west-2.amazonaws.com/cs290/SinglePassenger-ami-c97227f9.json
 
 
 ## Multiple Instance Templates
