@@ -23,7 +23,7 @@ configured to work as described above for its corresponding type.
 * __WEBrick__:  
   https://s3-us-west-2.amazonaws.com/cs290/MultiWEBrick.json
 * __NGINX + Passenger__:  
-  https://s3-us-west-2.amazonaws.com/cs290/MultiPassenger.json
+  https://s3-us-west-2.amazonaws.com/cs290/MultiPassenger-ami-c97227f9.json
 
 ## Other Templates
 
