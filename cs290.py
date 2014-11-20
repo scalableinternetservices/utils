@@ -169,7 +169,7 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(team))})
+             'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
         # Creation policies
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
@@ -202,7 +202,7 @@ class AWS(object):
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(team))})
+             'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
         self.op(self.iam, 'PutUserPolicy', UserName=team,
                 PolicyName=team, PolicyDocument=json.dumps(policy))
 
