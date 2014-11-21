@@ -55,7 +55,7 @@ purposes of CS290 classes.
 
 Resolve python dependencies via:
 
-    pip install botocore docopt github3
+    pip install botocore docopt github3.py
 
 Configure AWS credentials by creating/editing the file `~/.aws/credentials` so
 that it contains an `admin` section:
