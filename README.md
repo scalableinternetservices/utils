@@ -120,8 +120,7 @@ Use this command to completely remove one or more teams' permissions. This
 command may fail if the AWS user for the team was manually modified through the
 IAM web interface.
 
-### ./cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger]
-[--memcached]
+### ./cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
 
 This command will generate a cloud formation template usable by any of the
 teams configured via `cs290.py aws TEAM...`. On success, the S3 url to the
