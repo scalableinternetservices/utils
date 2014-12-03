@@ -54,12 +54,12 @@ purposes of CS290 classes.
 
 ## Set up
 
-### Resolve python dependencies via:
+__Resolve python dependencies via__:
 
     pip install botocore docopt github3.py
 
-### Configure AWS credentials by creating/editing the file `~/.aws/credentials`
-so that it contains an `admin` section:
+__Configure AWS credentials by creating/editing the file `~/.aws/credentials`
+so that it contains an `admin` section__:
 
     [admin]
     aws_access_key_id = ADMIN_USER_ACCESS_KEY
@@ -73,7 +73,7 @@ you issue a `gh` command. An access token will be saved to
 `~/.config/github_creds`. The github account you use should have admin rights
 to the github organization.
 
-### Update _constant_ values in `cs290.py`:
+__Update _constant_ values in `cs290.py`__:
 
 * __GH_ORGANIZATION__: If you are using a different github organization, change
   this value to reflect your organization. This will permit the following
