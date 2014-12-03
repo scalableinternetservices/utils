@@ -158,7 +158,7 @@ the same EC2 instance with the app server and database.
 Generate a cloudformation template to generate stacks that run the load testing
 tool funkload. The `--no-test` flag works as described above.
 
-### cs290 cftemplate passenger-ami
+### ./cs290 cftemplate passenger-ami
 
 Generate a cloudformation template useful to build a passenger ami. This
 template specifies an EC2 instance that precompiles passenger on launch, and
