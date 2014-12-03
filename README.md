@@ -51,14 +51,15 @@ __.ec2_initialize__
 Provides the functionality necessary to administrate github and AWS for the
 purposes of CS290 classes.
 
+
 ## Set up
 
-Resolve python dependencies via:
+### Resolve python dependencies via:
 
     pip install botocore docopt github3.py
 
-Configure AWS credentials by creating/editing the file `~/.aws/credentials` so
-that it contains an `admin` section:
+### Configure AWS credentials by creating/editing the file `~/.aws/credentials`
+so that it contains an `admin` section:
 
     [admin]
     aws_access_key_id = ADMIN_USER_ACCESS_KEY
@@ -72,15 +73,28 @@ you issue a `gh` command. An access token will be saved to
 `~/.config/github_creds`. The github account you use should have admin rights
 to the github organization.
 
+### Update _constant_ values in `cs290.py`:
+
+* __GH_ORGANIZATION__: If you are using a different github organization, change
+  this value to reflect your organization. This will permit the following
+  commands to work as intended.
+
+* __S3_BUCKET__: Change this value to reflect the S3 bucket where you would
+  like your cloudformation templates to be stored. Teams will also be permitted
+  to PUT/GET items from `S3_BUCKET/TEAMNAME/`.
+
+* __TEAM_MAP__: Update this value after all teams have been added, and before
+  `--multi` instance cloudformation templates have been generated.
+
 ## Commands
 
-### ./cs290.py aws TEAM
+### ./cs290.py aws TEAM...
 
-Use this command to configure the AWS permissions for a CS290 team. On first
-run for a team this will create the account, outputting the newly created
-credentials, and create the team's keypair file: `TEAM.pem`.
+Use this command to configure the AWS permissions for one ore more CS290
+teams. On first run for a team this command will create the account, outputting
+the newly created credentials, and create the team's keypair file: `TEAM.pem`.
 
-Subsequent runs can be used to make updates to the team's permissions. This is
+Subsequent runs can be used to make updates to a team's permissions. This is
 only necessary if the permission settings have been modified in the `cs290.py`
 file.
 
@@ -92,11 +106,66 @@ hour on the 31st minute:
 
     31 * * * * /home/bboe/src/cs290_utils/cs290.py aws-cleanup
 
-### ./cs290.py aws-purge TEAM
+### ./cs290.py aws-groups
 
-Use this command to completely undo the configuration created by `aws
-TEAM`. This command may fail if the AWS user for the team was manually modified
-through the IAM web interface.
+This command will output the AWS IAM groups and their associated security
+group. The output of this command is intended to be used to update the
+`TEAM_MAP` value in `cs290.py`. This mapping (and thus the command) is only
+required because the RDS configuration value `VPCSecurityGroups` does not
+permit providing security groups by name.
+
+### ./cs290.py aws-purge TEAM...
+
+Use this command to completely remove one or more teams' permissions. This
+command may fail if the AWS user for the team was manually modified through the
+IAM web interface.
+
+### ./cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger]
+[--memcached]
+
+This command will generate a cloud formation template usable by any of the
+teams configured via `cs290.py aws TEAM...`. On success, the S3 url to the
+generated cloudformation template will be output. The templates will be stored
+in `S3_BUCKET`.
+
+__Note__: Regenerating templates will overwrite existing templates. Hence, by
+default, template names (before the `.json` extension) are suffixed with
+`Test`. When you are sure you want to replace the _production_ template, use
+the `--no-test` option when generating the template.
+
+By default all app EC2 instances use the Amazon Linux AMI as specified in
+`CFTemplate.DEFAULT_AMI`. This value should be updated as Amazon releases newer
+versions of the AMI. The `--app-ami` parameter can also be used to change the
+AMI for a generated cloudformation template. This is primarily useful for
+provding an EC2 AMI with _passenger_ precompiled.
+
+The `--multi` flag is used to generate a cloudformation template utilizing a
+load balancer to distribute requests to 1 to 8 app EC2 instances, backed by an
+RDS database instance. When `--multi` is not not provided, the cloudformation
+template will result in a stack that runs on a single EC2 instance.
+
+The `--passenger` flag will result in app instances that are served via
+_passenger-standalone_, rather than `rails s` (WEBrick by default). When
+`--app-ami` is provided along with the `--passenger` flag, the cloudformation
+template will assume passenger is precompiled in the provided AMI, otherwise,
+it will be built on instance launch.
+
+The `--memached` flag will add memcached to the stack. When used in combination
+with `--multi`, memcached will run on its own instance, otherwise it'll share
+the same EC2 instance with the app server and database.
+
+### ./cs290 cftemplate funkload [--no-test]
+
+Generate a cloudformation template to generate stacks that run the load testing
+tool funkload. The `--no-test` flag works as described above.
+
+### cs290 cftemplate passenger-ami
+
+Generate a cloudformation template useful to build a passenger ami. This
+template specifies an EC2 instance that precompiles passenger on launch, and
+cleans up the environment so that an AMI can be immediately generated following
+this document:
+http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html
 
 ### ./cs290.py gh TEAM USER...
 

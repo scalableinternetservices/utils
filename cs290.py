@@ -28,6 +28,29 @@ import string
 import sys
 
 
+# Update this value for your github organization.
+GH_ORGANIZATION = 'scalableinternetservices'
+
+# Update this value for your class's S3 bucket.
+# Cloudformation templates are stored in this bucket, and each TEAM will have
+# PUT/GET permissions to `S3_BUCKET/TEAMNAME/`
+S3_BUCKET = 'cs290'
+
+# Update this value once teams are created using the `cs290 aws-groups` output.
+TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
+            'Compete': {'sg': 'sg-d33052b6'},
+            'Gradr': {'sg': 'sg-b53052d0'},
+            'LaPlaya': {'sg': 'sg-dd3052b8'},
+            'Lab-App': {'sg': 'sg-763c5213'},
+            'Motley-Crew': {'sg': 'sg-fa97fa9f'},
+            'Suppr': {'sg': 'sg-b13052d4'},
+            'Team-Hytta': {'sg': 'sg-1297fa77'},
+            'Upvid': {'sg': 'sg-bd3052d8'},
+            'Xup': {'sg': 'sg-a03052c5'},
+            'labapp': {'sg': 'sg-661f7203'},
+            'picShare': {'sg': 'sg-db3052be'}}
+
+
 class AWS(object):
 
     """This class handled AWS administrative tasks."""
@@ -107,7 +130,7 @@ class AWS(object):
         # self.operation_list(self.ec2)
         # self.operation_list(self.iam)
 
-        # Create cs290 group if it does not exist
+        # Create IAM group if it does not exist
         self.op(self.iam, 'CreateGroup', GroupName=self.GROUP)
         self.op(self.iam, 'PutGroupPolicy', GroupName=self.GROUP,
                 PolicyName=self.GROUP, PolicyDocument=json.dumps(self.POLICY))
@@ -182,12 +205,12 @@ class AWS(object):
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
                           AWS.ARNEC2.format('volume/*')]})
-        # Allow full access to cs290/TEAM in S3
+        # Allow full access to S3_BUCKET/TEAM in S3
         policy['Statement'].extend([
             {'Action': '*', 'Effect': 'Allow',
-             'Resource': 'arn:aws:s3:::cs290/{0}/*'.format(team)},
+             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
             {'Action': 's3:ListBucket', 'Effect': 'Allow',
-             'Resource': 'arn:aws:s3:::cs290'}])
+             'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}])
         # Filter the EC2 instances types that are allowed to be started
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
@@ -218,7 +241,7 @@ class AWS(object):
     def list_security_groups(self):
         """Output the teams and their security groups.
 
-        This function is useful for updating the CFTemplate.TEAM2SG value.
+        This function is useful for updating the TEAM_MAP value.
         """
         retval = self.op(self.ec2, 'DescribeSecurityGroups')
         pprint({x['GroupName']: {'sg': x['GroupId']} for x in
@@ -378,33 +401,15 @@ fi
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
   --region {AWS::Region}
 """}
-    INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
-                 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 'm3.xlarge',
-                 'm3.2xlarge']
     PACKAGES = {'funkload': {'gnuplot', 'python27'},
                 'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
                           'ruby21-devel'}}
-    # Update this value periodically from the `cs290 aws-groups` output.
-    TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
-                'Compete': {'sg': 'sg-d33052b6'},
-                'Gradr': {'sg': 'sg-b53052d0'},
-                'LaPlaya': {'sg': 'sg-dd3052b8'},
-                'Lab-App': {'sg': 'sg-763c5213'},
-                'Motley-Crew': {'sg': 'sg-fa97fa9f'},
-                'Suppr': {'sg': 'sg-b13052d4'},
-                'Team-Hytta': {'sg': 'sg-1297fa77'},
-                'Upvid': {'sg': 'sg-bd3052d8'},
-                'Xup': {'sg': 'sg-a03052c5'},
-                'labapp': {'sg': 'sg-661f7203'},
-                'picShare': {'sg': 'sg-db3052be'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
                 'Resources': {}}
-    # Update this bucket on a per-class-account basis
-    TEMPLATE_BUCKET = 'cs290'
 
     @staticmethod
     def get_att(resource, attribute):
@@ -453,7 +458,7 @@ fi
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
-            'https://github.com/scalableinternetservices/',
+            'https://github.com/', GH_ORGANIZATION, '/',
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
             app['services'] = {'sysvinit': {'mysqld': {'enabled': True,
@@ -526,13 +531,12 @@ fi
                                description=('The number of AppServer instances'
                                             ' to launch.'),
                                maxv=8, minv=1)
-            self.add_parameter('DBInstanceType', allowed=['db.' + x for x in
-                                                          self.INSTANCES],
+            self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
                                default='db.t1.micro',
                                description='The Database instance type.',
                                error_msg=('Must be a valid db.t1, db.m1, or '
                                           'db.m2 EC2 instance type.'))
-            self.template['Mappings'] = {'Teams': self.TEAM_MAP}
+            self.template['Mappings'] = {'Teams': TEAM_MAP}
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
@@ -677,13 +681,13 @@ fi
                            'SecurityGroups': [self.get_ref('TeamName')],
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
-        self.add_parameter('AppInstanceType', allowed=self.INSTANCES,
+        self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
                            default='t1.micro',
                            description='The AppServer instance type.',
                            error_msg=('Must be a valid t1, m1, or m2 EC2 '
                                       'instance type.'))
-        self.add_parameter('TeamName', allowed=self.TEAM_MAP.keys(),
-                           description='Your CS290 team name.',
+        self.add_parameter('TeamName', allowed=TEAM_MAP.keys(),
+                           description='Your team name.',
                            error_msg=('Must exactly match your team name '
                                       'as shown in your Github URL.'))
         if callback:
@@ -693,8 +697,7 @@ fi
                               sort_keys=True)
         if self.test:
             self.name += 'Test'
-        tmp = AWS().verify_template(template, (self.TEMPLATE_BUCKET,
-                                               self.name + '.json'))
+        tmp = AWS().verify_template(template, (S3_BUCKET, self.name + '.json'))
         if tmp:
             if isinstance(self, bool):
                 print(template)
@@ -728,7 +731,7 @@ def configure_github_team(team_name, user_names):
 
     gh_token, _ = get_github_token()
     gh = login(token=gh_token)
-    org = gh.membership_in('scalableinternetservices').organization
+    org = gh.membership_in(GH_ORGANIZATION).organization
 
     team = None  # Fetch or create team
     for iteam in org.iter_teams():
