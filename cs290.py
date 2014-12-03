@@ -3,10 +3,10 @@
 """CS290 administrative utility.
 
 Usage:
-  cs290 aws TEAM
+  cs290 aws TEAM...
   cs290 aws-cleanup
   cs290 aws-groups
-  cs290 aws-purge TEAM
+  cs290 aws-purge TEAM...
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
   cs290 cftemplate passenger-ami
@@ -32,7 +32,9 @@ class AWS(object):
 
     """This class handled AWS administrative tasks."""
 
-    EC2_INSTANCES = ['t1.micro', 'm1.small']
+    EC2_INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large',
+                     'm1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+                     'm3.xlarge', 'm3.2xlarge']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     REGION = 'us-west-2'
     ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
@@ -812,17 +814,28 @@ def main():
     """Enter cs290.py."""
     args = docopt(__doc__)
 
+    # Replace spaces with hyphens in team names
     if args['TEAM']:
-        args['TEAM'] = args['TEAM'].replace(' ', '-')
+        if isinstance(args['TEAM'], list):
+            for i, item in enumerate(args['TEAM']):
+                args['TEAM'][i] = item.strip().replace(' ', '-')
+        else:
+            args['TEAM'] = args['TEAM'].strip().replace(' ', '-')
 
     if args['aws']:
-        return AWS().configure(args['TEAM'])
+        for team in args['TEAM']:
+            retval = AWS().configure(team)
+            if retval:
+                return retval
     elif args['aws-cleanup']:
         return AWS().cleanup()
     elif args['aws-groups']:
         return AWS().list_security_groups()
     elif args['aws-purge']:
-        return AWS().purge(args['TEAM'])
+        for team in args['TEAM']:
+            retval = AWS().purge(team)
+            if retval:
+                return retval
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
         if args['funkload']:
