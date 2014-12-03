@@ -458,7 +458,7 @@ fi
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
-            'https://github.com/', GH_ORGANIZATION, '/',
+            'https://github.com/{0}/'.format(GH_ORGANIZATION),
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
             app['services'] = {'sysvinit': {'mysqld': {'enabled': True,
