@@ -8,11 +8,16 @@ Both the app server, and database are located on a single EC2 instance.
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
   https://s3-us-west-2.amazonaws.com/cs290/SingleWEBrick.json
+* __WEBrick + memcached__:  
+  Same as above, with the addition of using memcached through the `dalli` gem.  
+  https://s3-us-west-2.amazonaws.com/cs290/SingleWEBrickMemcached.json
 * __NGINX + Passenger__:  
   NGINX handles requests to port 80 and passes connections to instances of the
   app through Passenger. Multiple concurrent connections are supported.  
   https://s3-us-west-2.amazonaws.com/cs290/SinglePassenger-ami-c97227f9.json
-
+* __NGINX + Passenger + memcached__:  
+  Same as above, with the addition of using memcached through the `dalli` gem.
+  https://s3-us-west-2.amazonaws.com/cs290/SinglePassengerMemcached-ami-c97227f9.json
 
 ## Multiple Instance Templates
 

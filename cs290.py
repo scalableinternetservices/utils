@@ -324,6 +324,14 @@ echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
 user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
+            'memcached': """# Install dalli gem (for memcached)
+tmp="gem 'dalli'"; grep "^$tmp" Gemfile > /dev/null || echo $tmp >> Gemfile; \
+    unset tmp
+user_sudo bundle install || error_exit 'Failed to install dalli'
+# Configure rails to use dalli
+sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
+ :dalli_store/' config/environments/production.rb
+""",  # NOQA
             'ruby': """# Update alternatives
 alternatives --set ruby /usr/bin/ruby2.1 || error_exit 'Failed ruby2.1 default'
 # Install bundler only after the alternatives have been set.
@@ -461,8 +469,10 @@ fi
             'https://github.com/{0}/'.format(GH_ORGANIZATION),
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
-            app['services'] = {'sysvinit': {'mysqld': {'enabled': True,
-                                                       'ensureRunning': True}}}
+            ENABLE = {'enabled': True, 'ensureRunning': True}
+            app['services'] = {'sysvinit': {'mysqld': ENABLE}}
+            if self.memcached:
+                app['services']['sysvinit']['memcached'] = ENABLE
         perms = {'commands': {'update_permissions':
                               {'command': 'chown -R ec2-user:ec2-user .',
                                'cwd': '/home/ec2-user/'}}}
@@ -613,8 +623,8 @@ fi
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
-        :param memcached: (boolean) Template specifies a separate memcached
-            instance.
+        :param memcached: (boolean) Template specifies the installation of
+            memcached.
         :param multi: (boolean) Template moves the database to its own RDB
             instance, permits a variable number of app server instances, and
             distributes load to those instances via ELB.
@@ -631,6 +641,8 @@ fi
         self.yum_packages = self.PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
+            if memcached:
+                self.yum_packages.add('memcached')
         if passenger and not app_ami:
             self.yum_packages |= self.PACKAGES['passenger']
         name_parts = []
@@ -645,6 +657,11 @@ fi
             self.create_timeout = 'PT20M'
 
         sections = ['preamble', 'ruby', 'rails']
+        if self.memcached:
+            if self.multi:
+                raise Exception('Multi memcached is not yet supported')
+            else:
+                sections.append('memcached')
         if passenger:
             if app_ami:
                 print('WARN: Ensure {0} has passenger pre-built for the '
