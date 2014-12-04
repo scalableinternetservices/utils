@@ -48,7 +48,7 @@ TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
             'Upvid': {'sg': 'sg-bd3052d8'},
             'Xup': {'sg': 'sg-a03052c5'},
             'labapp': {'sg': 'sg-661f7203'},
-            'picShare': {'sg': 'sg-db3052be'}}
+            'picShare': {'sg': 'sg-31ee9354'}}
 
 
 class AWS(object):
