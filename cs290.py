@@ -75,6 +75,7 @@ class AWS(object):
                            'cloudwatch:DescribeAlarms',
                            'cloudwatch:GetMetricStatistics',
                            'elasticloadbalancing:Describe*', 'rds:Describe*',
+                           'iam:ListServerCertificates',
                            'rds:ListTagsForResource',
                            'sts:DecodeAuthorizationMessage'],
                 'Effect': 'Allow', 'Resource': '*'},
@@ -205,11 +206,17 @@ class AWS(object):
                           AWS.ARNEC2.format('security-group/*'),
                           AWS.ARNEC2.format('subnet/*'),
                           AWS.ARNEC2.format('volume/*')]})
+        # Allow teams to add their own SSL certificate
+        policy['Statement'].append(
+            {'Action': 'iam:UploadServerCertificate',
+             'Effect': 'Allow',
+             'Resource': 'arn:aws:iam::*:server-certificate/{0}'.format(team)})
         # Allow full access to S3_BUCKET/TEAM in S3
         policy['Statement'].extend([
             {'Action': '*', 'Effect': 'Allow',
              'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
             {'Action': 's3:ListBucket', 'Effect': 'Allow',
+             'Condition': {'StringLike': {'s3:prefix': '{0}/*'.format(team)}},
              'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}])
         # Filter the EC2 instances types that are allowed to be started
         policy['Statement'].append(
