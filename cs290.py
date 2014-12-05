@@ -253,16 +253,17 @@ class AWS(object):
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
         self.op(self.iam, 'DeleteLoginProfile', UserName=team)
-        self.op(self.iam, 'DeleteUserPolicy', UserName=team,
-                PolicyName=team)
+        self.op(self.iam, 'DeleteUserPolicy', UserName=team, PolicyName=team)
         resp = self.op(self.iam, 'ListAccessKeys', UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
                 self.op(self.iam, 'DeleteAccessKey', UserName=team,
                         AccessKeyId=keydata['AccessKeyId'])
-
         self.op(self.iam, 'RemoveUserFromGroup', GroupName=self.GROUP,
                 UserName=team)
+        self.op(self.iam, 'DeleteGroupPolicy', GroupName=team, PolicyName=team)
+        self.op(self.iam, 'RemoveUserFromGroup', GroupName=team, UserName=team)
+        self.op(self.iam, 'DeleteGroup', GroupName=team)
         self.op(self.iam, 'DeleteUser', UserName=team)
         self.op(self.ec2, 'DeleteKeyPair', KeyName=team)
         self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
