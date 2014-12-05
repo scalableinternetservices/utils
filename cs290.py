@@ -43,7 +43,9 @@ class AWS(object):
 
     EC2_INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large',
                      'm1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
-                     'm3.xlarge', 'm3.2xlarge']
+                     'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
+                     'c1.medium', 'c1.xlarge', 'c3.large', 'c3.xlarge',
+                     'c3.2xlarge', 'c3.4xlarge']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     REGION = 'us-west-2'
     ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
