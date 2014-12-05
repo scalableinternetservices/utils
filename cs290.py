@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+!/usr/bin/env python
 
 """CS290 administrative utility.
 
@@ -40,7 +40,7 @@ S3_BUCKET = 'cs290'
 
 class AWS(object):
 
-    """This class handled AWS administrative tasks."""
+    """This class handles AWS administrative tasks."""
 
     EC2_INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large',
                      'm1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
