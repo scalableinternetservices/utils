@@ -166,6 +166,11 @@ cleans up the environment so that an AMI can be immediately generated following
 this document:
 http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html
 
+### ./cs290 cftemplate-update-all [--no-test] [--passenger-ami=ami]
+
+Update all permutations of the APP-based stacks. The `--pasenger-ami` flag is
+used to set the AMI for all permutations involving passenger.
+
 ### ./cs290.py gh TEAM USER...
 
 Use this command to create a git repository, if it does not already exist, and

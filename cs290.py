@@ -10,6 +10,7 @@ Usage:
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
   cs290 cftemplate passenger-ami
+  cs290 cftemplate-update-all [--no-test] [--passenger-ami=ami]
   cs290 gh TEAM USER...
 
 -h --help  show this message
@@ -490,7 +491,7 @@ fi
         :param test: When true, append 'Test' to generated template name.
         """
         self.ami = self.DEFAULT_AMI
-        self.create_timeout = 'PT5M'
+        self.create_timeout = 'PT10M'
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
@@ -785,8 +786,11 @@ fi
         if tmp:
             if isinstance(self, bool):
                 print(template)
+                return 1
             else:
                 print(tmp)
+                return 0
+        return 1
 
 
 class UTC(tzinfo):
@@ -914,6 +918,7 @@ def main():
             retval = AWS().configure(team)
             if retval:
                 return retval
+        return 0
     elif args['aws-cleanup']:
         return AWS().cleanup()
     elif args['aws-purge']:
@@ -924,7 +929,10 @@ def main():
     elif args['aws-update-all']:
         aws = AWS()
         for team in aws.team_to_security_group():
-            aws.configure(team)
+            retval = aws.configure(team)
+            if retval:
+                return retval
+        return 0
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
         if args['funkload']:
@@ -936,6 +944,22 @@ def main():
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
                                      passenger=args['--passenger'])
+    elif args['cftemplate-update-all']:
+        bit_pos = ['passenger', 'multi', 'memcached']
+        for i in range(2 ** len(bit_pos)):
+            kwargs = {'app_ami': None}
+            for bit, argument in enumerate(bit_pos):
+                if i & 2 ** bit:
+                    kwargs[argument] = True
+                    if argument == 'passenger' and args['--passenger-ami']:
+                        kwargs['app_ami'] = args['--passenger-ami']
+                else:
+                    kwargs[argument] = False
+            cf = CFTemplate(test=not args['--no-test'])
+            retval = cf.generate_stack(**kwargs)
+            if retval:
+                return retval
+        return 0
     elif args['gh']:
         return configure_github_team(team_name=args['TEAM'],
                                      user_names=args['USER'])
