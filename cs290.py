@@ -196,6 +196,11 @@ class AWS(object):
             {'Action': 'iam:UploadServerCertificate',
              'Effect': 'Allow',
              'Resource': 'arn:aws:iam::*:server-certificate/{0}'.format(team)})
+        # Allow teams to use their team roles
+        policy['Statement'].append(
+            {'Action': 'iam:PassRole',
+             'Effect': 'Allow',
+             'Resource': 'arn:aws:iam::*:role/{0}'.format(team)})
         # Allow full access to S3_BUCKET/TEAM in S3
         policy['Statement'].extend([
             {'Action': '*', 'Effect': 'Allow',
@@ -220,8 +225,16 @@ class AWS(object):
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
              'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
+
+        # Create and associate TEAM group (can have longer policy lists)
+        self.op(self.iam, 'CreateGroup', GroupName=team)
+        self.op(self.iam, 'PutGroupPolicy', GroupName=team, PolicyName=team,
+                PolicyDocument=json.dumps(policy))
+        self.op(self.iam, 'AddUserToGroup', GroupName=team,  UserName=team)
+
+        # Clear the user's policy
         self.op(self.iam, 'PutUserPolicy', UserName=team,
-                PolicyName=team, PolicyDocument=json.dumps(policy))
+                PolicyName=team, PolicyDocument='{}')
 
         return 0
 
@@ -232,7 +245,7 @@ class AWS(object):
 
     def team_to_security_group(self):
         """Return a mapping of teams to their security groups."""
-        data = self.op(self.ec2, 'DescribeSecurityGroups')
+        data = self.op(self.ec2, 'DescribeSecurityGroups', debug_output=False)
         return {x['GroupName']: {'sg': x['GroupId']} for x in
                 data['SecurityGroups']
                 if not x['GroupName'].startswith('default')}
@@ -459,8 +472,6 @@ fi
         """Return a mapping of teams to their security group."""
         if self._team_map is None:
             self._team_map = AWS().team_to_security_group()
-            import pprint
-            pprint.pprint(self._team_map)
         return self._team_map
 
     def add_apps(self):
@@ -692,7 +703,8 @@ fi
                 'configSets': {'default': ['packages']},
                 'packages': {
                     'packages': {'yum': {x: [] for x in self.yum_packages}}}}},
-            'Properties': {'ImageId': self.ami,
+            'Properties': {'IamInstanceProfile': self.get_ref('TeamName'),
+                           'ImageId': self.ami,
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
                            'SecurityGroups': [self.get_ref('TeamName')],
