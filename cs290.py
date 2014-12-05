@@ -348,14 +348,19 @@ echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
 user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
-            'memcached': """# Install dalli gem (for memcached)
+            'memcached_configure_multi': """# Configure rails to use dalli
+sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
+ :dalli_store, "{Memcached,PublicDnsName}"/' config/environments/production.rb
+""",
+            'memcached_configure_single': """# Configure rails to use dalli
+sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
+ :dalli_store/' config/environments/production.rb
+""",
+            'memcached_install': """# Install dalli gem (for memcached)
 tmp="gem 'dalli'"; grep "^$tmp" Gemfile > /dev/null || echo $tmp >> Gemfile; \
     unset tmp
 user_sudo bundle install || error_exit 'Failed to install dalli'
-# Configure rails to use dalli
-sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
- :dalli_store/' config/environments/production.rb
-""",  # NOQA
+""",
             'ruby': """# Update alternatives
 alternatives --set ruby /usr/bin/ruby2.1 || error_exit 'Failed ruby2.1 default'
 # Install bundler only after the alternatives have been set.
@@ -471,9 +476,12 @@ fi
             if item[0]:
                 retval.append(item[0])
             if item[1]:
-                retval.append({'Ref': item[1]})
-                if item[2]:  # Correct the string when '::' is used
-                    retval[-1]['Ref'] += ':' + item[2]
+                if ',' in item[1]:
+                    retval.append(CFTemplate.get_att(*item[1].split(',', 1)))
+                else:
+                    retval.append({'Ref': item[1]})
+                    if item[2]:  # Correct the string when '::' is used
+                        retval[-1]['Ref'] += ':' + item[2]
         return retval
 
     def __init__(self, test):
@@ -551,11 +559,12 @@ fi
             param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
-    def add_ssh_output(self):
+    def add_ssh_output(self, resource_name='AppServer'):
         """Output the SSH connection string."""
-        self.add_output('SSH', 'SSH connection string', self.join(
+        self.add_output('SSH', '{0} SSH connect string'.format(resource_name),
+                        self.join(
             'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att('AppServer', 'PublicDnsName')))
+            self.get_att(resource_name, 'PublicDnsName')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
@@ -575,9 +584,7 @@ fi
                                maxv=8, minv=1)
             self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
                                default='db.t1.micro',
-                               description='The Database instance type.',
-                               error_msg=('Must be a valid db.t1, db.m1, or '
-                                          'db.m2 EC2 instance type.'))
+                               description='The Database instance type.')
             self.template['Mappings'] = {'Teams': self.team_map}
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
@@ -615,6 +622,34 @@ fi
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}]},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
+            if self.memcached:
+                self.add_parameter(
+                    'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
+                    default='t1.micro',
+                    description='The memcached instance type')
+                # Memcached EC2 Instance
+                sections = ['preamble', 'postamble']
+                userdata = self.join(*(
+                    item for section in sections for item in self.join_format(
+                        self.INIT[section]
+                        .replace('%%RESOURCE%%', 'Memcached')
+                        .replace('AppServer', 'Memcached'))))
+                ENABLE = {'enabled': True, 'ensureRunning': True}
+                self.template['Resources']['Memcached'] = {
+                    'CreationPolicy': {'ResourceSignal': {'Timeout': 'PT5M'}},
+                    'Metadata': {'AWS::CloudFormation::Init': {
+                        'config': {
+                            'packages': {'yum': {'memcached': []}},
+                            'services': {'sysvinit': {'memcached': ENABLE}}}}},
+                    'Properties': {
+                        'IamInstanceProfile': self.get_ref('TeamName'),
+                        'ImageId': self.DEFAULT_AMI,
+                        'InstanceType': self.get_ref('MemcachedInstanceType'),
+                        'KeyName': self.get_ref('TeamName'),
+                        'SecurityGroups': [self.get_ref('TeamName')],
+                        'UserData': {'Fn::Base64': userdata}},
+                    'Type': 'AWS::EC2::Instance'}
+                self.add_ssh_output('Memcached')
         else:
             url = self.get_att('AppServer', 'PublicDnsName')
             self.add_ssh_output()
@@ -690,10 +725,11 @@ fi
 
         sections = ['preamble', 'ruby', 'rails']
         if self.memcached:
+            sections.append('memcached_install')
             if self.multi:
-                raise Exception('Multi memcached is not yet supported')
+                sections.append('memcached_configure_multi')
             else:
-                sections.append('memcached')
+                sections.append('memcached_configure_single')
         if passenger:
             if app_ami:
                 print('WARN: Ensure {0} has passenger pre-built for the '
@@ -733,9 +769,7 @@ fi
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
                            default='t1.micro',
-                           description='The AppServer instance type.',
-                           error_msg=('Must be a valid t1, m1, or m2 EC2 '
-                                      'instance type.'))
+                           description='The AppServer instance type.')
         self.add_parameter('TeamName', allowed=self.team_map.keys(),
                            description='Your team name.',
                            error_msg=('Must exactly match your team name '
