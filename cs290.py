@@ -6,6 +6,7 @@ Usage:
   cs290 aws TEAM...
   cs290 aws-cleanup
   cs290 aws-purge TEAM...
+  cs290 aws-update-all
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
   cs290 cftemplate passenger-ami
@@ -116,6 +117,26 @@ class AWS(object):
         # self.operation_list(self.ec2)
         # self.operation_list(self.iam)
 
+        s3_statement = [
+            {'Action': '*', 'Effect': 'Allow',
+             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
+            {'Action': 's3:ListBucket', 'Effect': 'Allow',
+             'Condition': {'StringLike': {'s3:prefix': '{0}/*'.format(team)}},
+             'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}]
+
+        # Create IAM role (permits S3 access from associated EC2 instances)
+        role_policy = {'Statement': {
+            'Action': 'sts:AssumeRole',
+            'Effect': 'Allow',
+            'Principal': {'Service': 'ec2.amazonaws.com'}}}
+        self.op(self.iam, 'CreateInstanceProfile', InstanceProfileName=team)
+        self.op(self.iam, 'CreateRole', RoleName=team,
+                AssumeRolePolicyDocument=json.dumps(role_policy))
+        self.op(self.iam, 'AddRoleToInstanceProfile', RoleName=team,
+                InstanceProfileName=team)
+        self.op(self.iam, 'PutRolePolicy', RoleName=team, PolicyName=team,
+                PolicyDocument=json.dumps({'Statement': s3_statement}))
+
         # Create IAM group if it does not exist
         self.op(self.iam, 'CreateGroup', GroupName=self.GROUP)
         self.op(self.iam, 'PutGroupPolicy', GroupName=self.GROUP,
@@ -176,7 +197,7 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': 'elasticloadbalancing:*',
              'Effect': 'Allow',
-             'Resource': AWS.ARNELB.format('{}*'.format(team))})
+             'Resource': AWS.ARNELB.format('{0}*'.format(team))})
         policy['Statement'].append(
             {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
@@ -202,12 +223,7 @@ class AWS(object):
              'Effect': 'Allow',
              'Resource': 'arn:aws:iam::*:role/{0}'.format(team)})
         # Allow full access to S3_BUCKET/TEAM in S3
-        policy['Statement'].extend([
-            {'Action': '*', 'Effect': 'Allow',
-             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
-            {'Action': 's3:ListBucket', 'Effect': 'Allow',
-             'Condition': {'StringLike': {'s3:prefix': '{0}/*'.format(team)}},
-             'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}])
+        policy['Statement'].extend(s3_statement)
         # Filter the EC2 instances types that are allowed to be started
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
@@ -231,11 +247,6 @@ class AWS(object):
         self.op(self.iam, 'PutGroupPolicy', GroupName=team, PolicyName=team,
                 PolicyDocument=json.dumps(policy))
         self.op(self.iam, 'AddUserToGroup', GroupName=team,  UserName=team)
-
-        # Clear the user's policy
-        self.op(self.iam, 'PutUserPolicy', UserName=team,
-                PolicyName=team, PolicyDocument='{}')
-
         return 0
 
     def get_service(self, service_name, endpoint_name):
@@ -252,6 +263,13 @@ class AWS(object):
 
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
+        # Remove IAM Role
+        self.op(self.iam, 'RemoveRoleFromInstanceProfile', RoleName=team,
+                InstanceProfileName=team)
+        self.op(self.iam, 'DeleteRolePolicy', RoleName=team,
+                PolicyName=team)
+        self.op(self.iam, 'DeleteRole', RoleName=team)
+        # Remove IAM User and Group
         self.op(self.iam, 'DeleteLoginProfile', UserName=team)
         self.op(self.iam, 'DeleteUserPolicy', UserName=team, PolicyName=team)
         resp = self.op(self.iam, 'ListAccessKeys', UserName=team)
@@ -867,6 +885,10 @@ def main():
             retval = AWS().purge(team)
             if retval:
                 return retval
+    elif args['aws-update-all']:
+        aws = AWS()
+        for team in aws.team_to_security_group():
+            aws.configure(team)
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
         if args['funkload']:
