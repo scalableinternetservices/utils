@@ -5,7 +5,6 @@
 Usage:
   cs290 aws TEAM...
   cs290 aws-cleanup
-  cs290 aws-groups
   cs290 aws-purge TEAM...
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
@@ -35,20 +34,6 @@ GH_ORGANIZATION = 'scalableinternetservices'
 # Cloudformation templates are stored in this bucket, and each TEAM will have
 # PUT/GET permissions to `S3_BUCKET/TEAMNAME/`
 S3_BUCKET = 'cs290'
-
-# Update this value once teams are created using the `cs290 aws-groups` output.
-TEAM_MAP = {'BaconWindshield': {'sg': 'sg-ab3052ce'},
-            'Compete': {'sg': 'sg-d33052b6'},
-            'Gradr': {'sg': 'sg-b53052d0'},
-            'LaPlaya': {'sg': 'sg-dd3052b8'},
-            'Lab-App': {'sg': 'sg-763c5213'},
-            'Motley-Crew': {'sg': 'sg-fa97fa9f'},
-            'Suppr': {'sg': 'sg-b13052d4'},
-            'Team-Hytta': {'sg': 'sg-1297fa77'},
-            'Upvid': {'sg': 'sg-bd3052d8'},
-            'Xup': {'sg': 'sg-a03052c5'},
-            'labapp': {'sg': 'sg-661f7203'},
-            'picShare': {'sg': 'sg-31ee9354'}}
 
 
 class AWS(object):
@@ -245,14 +230,12 @@ class AWS(object):
         service = self.aws.get_service(service_name)
         return service, service.get_endpoint(endpoint_name)
 
-    def list_security_groups(self):
-        """Output the teams and their security groups.
-
-        This function is useful for updating the TEAM_MAP value.
-        """
-        retval = self.op(self.ec2, 'DescribeSecurityGroups')
-        pprint({x['GroupName']: {'sg': x['GroupId']} for x in
-                retval['SecurityGroups']})
+    def team_to_security_group(self):
+        """Return a mapping of teams to their security groups."""
+        data = self.op(self.ec2, 'DescribeSecurityGroups')
+        return {x['GroupName']: {'sg': x['GroupId']} for x in
+                data['SecurityGroups']
+                if not x['GroupName'].startswith('default')}
 
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
@@ -469,6 +452,16 @@ fi
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
+        self._team_map = None
+
+    @property
+    def team_map(self):
+        """Return a mapping of teams to their security group."""
+        if self._team_map is None:
+            self._team_map = AWS().team_to_security_group()
+            import pprint
+            pprint.pprint(self._team_map)
+        return self._team_map
 
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
@@ -553,7 +546,7 @@ fi
                                description='The Database instance type.',
                                error_msg=('Must be a valid db.t1, db.m1, or '
                                           'db.m2 EC2 instance type.'))
-            self.template['Mappings'] = {'Teams': TEAM_MAP}
+            self.template['Mappings'] = {'Teams': self.team_map}
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
@@ -710,7 +703,7 @@ fi
                            description='The AppServer instance type.',
                            error_msg=('Must be a valid t1, m1, or m2 EC2 '
                                       'instance type.'))
-        self.add_parameter('TeamName', allowed=TEAM_MAP.keys(),
+        self.add_parameter('TeamName', allowed=self.team_map.keys(),
                            description='Your team name.',
                            error_msg=('Must exactly match your team name '
                                       'as shown in your Github URL.'))
@@ -856,8 +849,6 @@ def main():
                 return retval
     elif args['aws-cleanup']:
         return AWS().cleanup()
-    elif args['aws-groups']:
-        return AWS().list_security_groups()
     elif args['aws-purge']:
         for team in args['TEAM']:
             retval = AWS().purge(team)

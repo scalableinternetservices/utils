@@ -88,9 +88,6 @@ __Update _constant_ values in `cs290.py`__:
   like your cloudformation templates to be stored. Teams will also be permitted
   to PUT/GET items from `S3_BUCKET/TEAMNAME/`.
 
-* __TEAM_MAP__: Update this value after all teams have been added, and before
-  `--multi` instance cloudformation templates have been generated.
-
 ## Commands
 
 ### ./cs290.py aws TEAM...
@@ -110,14 +107,6 @@ run this as a cron job. The following crontab entry will run this command every
 hour on the 31st minute:
 
     31 * * * * /home/bboe/src/cs290_utils/cs290.py aws-cleanup
-
-### ./cs290.py aws-groups
-
-This command will output the AWS IAM groups and their associated security
-group. The output of this command is intended to be used to update the
-`TEAM_MAP` value in `cs290.py`. This mapping (and thus the command) is only
-required because the RDS configuration value `VPCSecurityGroups` does not
-permit providing security groups by name.
 
 ### ./cs290.py aws-purge TEAM...
 
