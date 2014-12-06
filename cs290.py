@@ -343,9 +343,9 @@ function user_sudo {{
             'funkload': """# Install python2.7 environment
 easy_install pip || error_exit 'Failure installing pip'
 pip install virtualenv || error_exit 'Failure installing virtualenv'
-user_sudo virtualenv ~/.py27 -p /usr/bin/python27\
+user_sudo virtualenv /home/ec2-user/.py27 -p /usr/bin/python27\
  || error_exit 'Error creating py27 virtualenv'
-echo "source ~/.py27/bin/activate" >> /home/ec2-user/.bashrc
+echo "source /home/ec2-user/.py27/bin/activate" >> /home/ec2-user/.bashrc
 user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
