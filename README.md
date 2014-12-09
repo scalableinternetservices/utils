@@ -48,6 +48,25 @@ __.ec2_initialize__
     sudo yum install -y ImageMagick
     rake db:seed
 
+## Configuring NGINX
+
+NGINX is provided through _passenger-standalone_, and NGINX + Passenger is
+configured to start in the cloudformation templates via the command `passenger
+start`. If you would like to adjust some of the NGINX settings you can do two
+things:
+
+First, add a `Passengerfile.json` file to the root of your repository. In this
+file you can specify a number of NGINX options as listed in this document:
+https://www.phusionpassenger.com/documentation/Users%20guide%20Standalone.html#config_file
+
+Second, if the few options that can be provided in `Passengerfile.json` is not
+sufficient, you can provide your own nginx template. Add the following to the
+json dictionary in `Passengerfile.json`:
+
+    "nginx_config_template": "nginx.conf"
+
+Then create the file `nginx.conf` in the root of your repository with whatever
+NGINX configuration you require.
 
 # cs290.py
 
