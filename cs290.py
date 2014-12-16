@@ -280,11 +280,18 @@ class AWS(object):
             for keydata in resp['AccessKeyMetadata']:
                 self.op(self.iam, 'DeleteAccessKey', UserName=team,
                         AccessKeyId=keydata['AccessKeyId'])
-        self.op(self.iam, 'RemoveUserFromGroup', GroupName=self.GROUP,
-                UserName=team)
-        self.op(self.iam, 'DeleteGroupPolicy', GroupName=team, PolicyName=team)
-        self.op(self.iam, 'RemoveUserFromGroup', GroupName=team, UserName=team)
-        self.op(self.iam, 'DeleteGroup', GroupName=team)
+        # Remove user from groups
+        for group in self.op(self.iam, 'ListGroupsForUser',
+                             UserName=team)['Groups']:
+            group_name = group['GroupName']
+            self.op(self.iam, 'RemoveUserFromGroup', GroupName=group_name,
+                    UserName=team)
+            if not self.op(self.iam, 'GetGroup',
+                           GroupName=group_name)['Users']:
+                # Delete group
+                self.op(self.iam, 'DeleteGroupPolicy', GroupName=group_name,
+                        PolicyName=group_name)
+                self.op(self.iam, 'DeleteGroup', GroupName=group_name)
         self.op(self.iam, 'DeleteUser', UserName=team)
         self.op(self.ec2, 'DeleteKeyPair', KeyName=team)
         self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
