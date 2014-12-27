@@ -1,0 +1,118 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Outputs": {
+    "SSH": {
+      "Description": "AppServer SSH connect string",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "ssh -i ",
+            {
+              "Ref": "PemKey"
+            },
+            ".pem ec2-user@",
+            {
+              "Fn::GetAtt": [
+                "AppServer",
+                "PublicDnsName"
+              ]
+            }
+          ]
+        ]
+      }
+    }
+  },
+  "Parameters": {
+    "PemKey": {
+      "Description": "What PEM key do you plan to use?",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "InstanceSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable SSH access via port 22",
+        "SecurityGroupIngress" : [ {
+          "IpProtocol" : "tcp",
+          "FromPort" : "22",
+          "ToPort" : "22",
+          "CidrIp" : "0.0.0.0/0"
+        } ]
+      }
+    },  
+    "AppServer": {
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Timeout": "PT10M"
+        }
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "default": [
+              "packages"
+            ]
+          },
+          "packages": {
+            "packages": {
+              "yum": {
+                "python27": []
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": "ami-55a7ea65",
+        "InstanceType": "t1.micro",
+        "KeyName": {
+          "Ref": "PemKey"
+        },
+        "SecurityGroups" : [{ "Ref" : "InstanceSecurityGroup" }],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -v\nyum update -y aws-cfn-bootstrap\n# Helper function\nfunction error_exit {",
+                "\n    /opt/aws/bin/cfn-signal -e 1 -r \"$1\" --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "       --resource AppServer --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n    exit 1\n}",
+                "\n# Run cfn-init (see AWS::CloudFormation::Init)\n/opt/aws/bin/cfn-init -s ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                " -r AppServer   --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                " || error_exit 'Failed to run cfn-init'\n# Don't require tty to run sudo\nsed -i 's/ requiretty/ !requiretty/' /etc/sudoers\nfunction user_sudo {",
+                "\n    sudo -u ec2-user bash -lc \"$*\"\n}",
+                "\n",
+                "# Install python2.7 environment\neasy_install pip || error_exit 'Failure installing pip'\npip install virtualenv || error_exit 'Failure installing virtualenv'\nuser_sudo virtualenv /home/ec2-user/.py27 -p /usr/bin/python27 || error_exit 'Error creating py27 virtualenv'\necho \"source /home/ec2-user/.py27/bin/activate\" >> /home/ec2-user/.bashrc\n",
+                "# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                " --resource AppServer   --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::EC2::Instance"
+    }
+  }
+}
