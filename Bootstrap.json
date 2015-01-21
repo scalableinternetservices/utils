@@ -58,7 +58,8 @@
           "packages": {
             "packages": {
               "yum": {
-                "python27": []
+                "python27": [],
+                "git": []
               }
             }
           }
