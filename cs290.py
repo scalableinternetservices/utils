@@ -379,6 +379,7 @@ echo "export PATH=/usr/local/bin:\$PATH" >> /home/ec2-user/.bashrc
             'rails': """# Change to the app directory
 cd /home/ec2-user/app
 # Add environment variables to ec2-user's .bashrc
+export RAILS_ENV=production
 echo "export RAILS_ENV=production" >> ../.bashrc
 echo "export SECRET_KEY_BASE=b801783afb83bb8e614b32ccf6c05c855a927116d92062a75\
 c6ffa61d58c58e62f13eb60cf1a31922c44b7e6a3e8f1809934a93llask938bl" >> ../.bashrc
