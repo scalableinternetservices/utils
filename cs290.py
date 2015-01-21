@@ -386,6 +386,12 @@ c6ffa61d58c58e62f13eb60cf1a31922c44b7e6a3e8f1809934a93llask938bl" >> ../.bashrc
 # Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
 iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
 
+# Run the app specific ec2 initialization
+if [ -f .ec2_initialize ]; then
+    sudo -u ec2-user bash -l .ec2_initialize\
+     || error_exit 'Failed to run .ec2_initialize'
+fi
+
 # Run the remaining commands as the ec2-user in the app directory
 user_sudo bundle install --without test development\
  || error_exit 'Failed to install bundle'
@@ -404,9 +410,9 @@ if [ $loop -eq 0 ]; then
   error_exit 'Failed to execute database migration'
 fi
 # Run the app specific ec2 initialization
-if [ -f .ec2_initialize ]; then
-    sudo -u ec2-user bash -l .ec2_initialize\
-     || error_exit 'Failed to run .ec2_initialize'
+if [ -f .rails_initialize ]; then
+    sudo -u ec2-user bash -l .rails_initialize\
+     || error_exit 'Failed to run .rails_initialize'
 fi
 # Fix multi_json gem version (>1.7.8 has issues precompiling assets)
 echo -e "\ngem 'multi_json', '1.7.8'" >> Gemfile
