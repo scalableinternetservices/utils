@@ -392,6 +392,10 @@ if [ -f .ec2_initialize ]; then
      || error_exit 'Failed to run .ec2_initialize'
 fi
 
+# Add gems needed on production
+echo -e "\ngem 'therubyracer' " >> Gemfile
+echo -e "\ngem 'mysql2' " >> Gemfile
+
 # Run the remaining commands as the ec2-user in the app directory
 user_sudo bundle install --without test development\
  || error_exit 'Failed to install bundle'
