@@ -99,6 +99,8 @@
                 "\n    sudo -u ec2-user bash -lc \"$*\"\n}",
                 "\n",
                 "# Install python2.7 environment\neasy_install pip || error_exit 'Failure installing pip'\npip install virtualenv || error_exit 'Failure installing virtualenv'\nuser_sudo virtualenv /home/ec2-user/.py27 -p /usr/bin/python27 || error_exit 'Error creating py27 virtualenv'\necho \"source /home/ec2-user/.py27/bin/activate\" >> /home/ec2-user/.bashrc\n",
+                "source /home/ec2-user/.py27/bin/activate\n",
+                "pip install docopt\n",
                 "# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack ",
                 {
                   "Ref": "AWS::StackName"
