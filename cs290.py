@@ -430,7 +430,7 @@ user_sudo rake assets:precompile\
 sed -i 's/serve_static_assets = false/serve_static_assets = true/'\
  config/environments/production.rb
 # Start up WEBrick (or whatever server is installed)
-user_sudo rails server -d || error_exit 'Failed to start rails server'
+user_sudo rails server -d -b 0.0.0.0 || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
 user_sudo passenger start -d --no-compile-runtime\
