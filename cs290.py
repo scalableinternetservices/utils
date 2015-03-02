@@ -9,6 +9,7 @@ Usage:
   cs290 aws-update-all
   cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
   cs290 cftemplate funkload [--no-test]
+  cs290 cftemplate tsung [--no-test]
   cs290 cftemplate passenger-ami
   cs290 cftemplate-update-all [--no-test] [--passenger-ami=ami]
   cs290 gh TEAM USER...
@@ -356,6 +357,45 @@ echo "source /home/ec2-user/.py27/bin/activate" >> /home/ec2-user/.bashrc
 user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
+            'tsung': """ 
+# Install tsung environment
+echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
+echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
+echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.core.wmem_max = 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_wmem = 4096 65536 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_mem = 50576 64768 98152" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.core.netdev_max_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.core.somaxconn = 1024" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_max_syn_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+sysctl -p
+export HOME=/home/ec2-user/
+cd $HOME/
+user_sudo mkdir /home/ec2-user/opt
+user_sudo wget http://www.erlang.org/download/otp_src_R16B03-1.tar.gz
+user_sudo tar xzf otp_src_R16B03-1.tar.gz
+cd otp_src_R16B03-1
+user_sudo ./configure --prefix=/home/ec2-user/opt/erlang-R16B03-1
+user_sudo make install
+user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin' > /etc/profile.d/erlang.sh
+user_sudo chmod +x /etc/profile.d/erlang.sh
+user_sudo pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin
+cd $HOME 
+user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.5.0.tar.gz
+user_sudo tar xzf tsung-1.5.0.tar.gz
+cd tsung-1.5.0
+user_sudo ./configure --prefix=$HOME/opt/tsung-1.5.0
+user_sudo make install
+sudo cpan Template
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin' > /etc/profile.d/tsung.sh
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin' >> /etc/profile.d/tsung.sh
+sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
+# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack 
+
+true || error_exit 'Error installing tsung'
+""",
             'memcached_configure_multi': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
  :dalli_store, "{Memcached,PublicDnsName}"/' config/environments/production.rb
@@ -458,6 +498,9 @@ fi
   --region {AWS::Region}
 """}
     PACKAGES = {'funkload': {'gnuplot', 'python27'},
+                'tsung': {'gcc', 'python27', 'git', 'autoconf', 'numpy',
+                          'scipy', 'python-matplotlib', 'gnuplot',
+                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'},
                 'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
@@ -681,6 +724,16 @@ fi
         self.name = 'FunkLoad'
         self.yum_packages = self.PACKAGES['funkload']
         sections = ['preamble', 'funkload', 'postamble']
+        self.add_ssh_output()
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
+
+    def generate_tsung(self):
+        """Output the cloudformation template for a tsung instance."""
+        self.name = 'Tsung'
+        self.create_timeout = 'PT30M'
+        self.yum_packages = self.PACKAGES['tsung']
+        sections = ['preamble', 'tsung', 'postamble']
         self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
@@ -955,6 +1008,8 @@ def main():
         cf = CFTemplate(test=not args['--no-test'])
         if args['funkload']:
             return cf.generate_funkload()
+        elif args['tsung']:
+            return cf.generate_tsung()
         elif args['passenger-ami']:
             return cf.generate_passenger_ami()
         else:
