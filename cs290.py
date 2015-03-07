@@ -393,7 +393,6 @@ user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin' > /etc/profile.d/t
 user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin' >> /etc/profile.d/tsung.sh
 sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
 # All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack 
-
 true || error_exit 'Error installing tsung'
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
@@ -735,6 +734,7 @@ fi
         self.yum_packages = self.PACKAGES['tsung']
         sections = ['preamble', 'tsung', 'postamble']
         self.add_ssh_output()
+        self.add_apps()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
