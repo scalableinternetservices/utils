@@ -102,6 +102,7 @@
                 "source /home/ec2-user/.py27/bin/activate\n",
                 "pip install docopt\n",
                 "pip install botocore\n",
+                "pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
                 "# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack ",
                 {
                   "Ref": "AWS::StackName"
