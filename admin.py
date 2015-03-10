@@ -734,7 +734,6 @@ fi
         self.yum_packages = self.PACKAGES['tsung']
         sections = ['preamble', 'tsung', 'postamble']
         self.add_ssh_output()
-        self.add_apps()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
