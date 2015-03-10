@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 
-"""CS290 administrative utility.
+"""Scalable Internet Services administrative utility.
 
 Usage:
-  cs290 aws TEAM...
-  cs290 aws-cleanup
-  cs290 aws-purge TEAM...
-  cs290 aws-update-all
-  cs290 cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
-  cs290 cftemplate funkload [--no-test]
-  cs290 cftemplate tsung [--no-test]
-  cs290 cftemplate passenger-ami
-  cs290 cftemplate-update-all [--no-test] [--passenger-ami=ami]
-  cs290 gh TEAM USER...
+  admin aws TEAM...
+  admin aws-cleanup
+  admin aws-purge TEAM...
+  admin aws-update-all
+  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
+  admin cftemplate funkload [--no-test]
+  admin cftemplate tsung [--no-test]
+  admin cftemplate passenger-ami
+  admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
+  admin gh TEAM USER...
 
 -h --help  show this message
 """  # NOQA
@@ -36,7 +36,7 @@ GH_ORGANIZATION = 'scalableinternetservices'
 # Update this value for your class's S3 bucket.
 # Cloudformation templates are stored in this bucket, and each TEAM will have
 # PUT/GET permissions to `S3_BUCKET/TEAMNAME/`
-S3_BUCKET = 'cs290'
+S3_BUCKET = 'scalableinternetservices'
 
 
 class AWS(object):
@@ -74,7 +74,7 @@ class AWS(object):
                 'Effect': 'Allow', 'Resource': '*'},
                {'Action': ['s3:Get*', 's3:Put*'], 'Effect': 'Allow',
                 'Resource': 'arn:aws:s3:::cf-templates*{0}*'.format(REGION)}]}
-    GROUP = 'cs290'
+    GROUP = 'scalableinternetservices'
     PROFILE = 'admin'
 
     @staticmethod
@@ -325,7 +325,7 @@ class AWS(object):
 
 class CFTemplate(object):
 
-    """Generate CS290 Cloudformation templates."""
+    """Generate Scalable Internet Services Cloudformation templates."""
 
     DEFAULT_AMI = 'ami-55a7ea65'
     # The following strings are python-format strings, however, the values
@@ -948,7 +948,7 @@ def get_github_token():
 
     user = getuser()
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
-                     ['public_repo'], 'CS290 Create Repo Script',
+                     ['public_repo'], 'Scalable Internet Services Create Repo Script',
                      'http://example.com',
                      two_factor_callback=two_factor_callback)
 
@@ -973,7 +973,7 @@ def get_pivotaltracker_token():
 
 
 def main():
-    """Enter cs290.py."""
+    """Enter admin.py."""
     args = docopt(__doc__)
 
     # Replace spaces with hyphens in team names
