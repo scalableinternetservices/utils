@@ -317,10 +317,14 @@ class AWS(object):
         s3 = self.get_service('s3', None)
         retval = self.op(s3, 'PutObject', Bucket=bucket, Key=key,
                          Body=template, acl='public-read', debug_output=False)
-        if not retval:
+
+	bucketized_host = s3[1].host.replace("s3.amazonaws.com", 
+                                           "{0}.s3.amazonaws.com".format(bucket))
+
+	if not retval:
             return retval
-        return '{host}/{bucket}/{key}'.format(
-            host=s3[1].host, bucket=bucket, key=key)
+        return '{host}/{key}'.format(
+            host=bucketized_host, key=key)
 
 
 class CFTemplate(object):
