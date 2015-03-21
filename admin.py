@@ -470,10 +470,8 @@ user_sudo rake assets:precompile\
  || error_exit 'Failed to precompile static assets'
 """,
             'webrick': """# Configure the app to serve static assets
-sed -i 's/serve_static_assets = false/serve_static_assets = true/'\
- config/environments/production.rb
 # Start up WEBrick (or whatever server is installed)
-user_sudo rails server -d -b 0.0.0.0 || error_exit 'Failed to start rails server'
+user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0 || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
 user_sudo passenger start -d --no-compile-runtime\
