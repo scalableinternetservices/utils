@@ -946,7 +946,8 @@ def get_github_token():
 
     user = getuser()
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
-                     ['public_repo'], 'Scalable Internet Services Create Repo Script',
+                     ['public_repo', 'admin:org'],
+                     'Scalable Internet Services Create Repo Script',
                      'http://example.com',
                      two_factor_callback=two_factor_callback)
 
