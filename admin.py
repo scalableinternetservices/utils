@@ -160,7 +160,7 @@ class AWS(object):
             if data:
                 filename = '{0}.pem'.format(team)
                 with open(filename, 'w') as fd:
-                    os.chmod(filename, 0600)
+                    os.chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
         self.op(self.iam, 'AddUserToGroup', GroupName=self.GROUP,
@@ -318,10 +318,10 @@ class AWS(object):
         retval = self.op(s3, 'PutObject', Bucket=bucket, Key=key,
                          Body=template, acl='public-read', debug_output=False)
 
-	bucketized_host = s3[1].host.replace("s3.amazonaws.com", 
-                                           "{0}.s3.amazonaws.com".format(bucket))
+        bucketized_host = s3[1].host.replace(
+            "s3.amazonaws.com", "{0}.s3.amazonaws.com".format(bucket))
 
-	if not retval:
+        if not retval:
             return retval
         return '{host}/{key}'.format(
             host=bucketized_host, key=key)
