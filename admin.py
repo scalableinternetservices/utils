@@ -879,7 +879,6 @@ class UTC(tzinfo):
 
 def configure_github_team(team_name, user_names):
     """Create team and team repository and add users to the team on Github."""
-    from github3 import login
     print("""About to create:
      Team: {0}
      Members: {1}\n""".format(team_name, ', '.join(user_names)))
@@ -889,9 +888,7 @@ def configure_github_team(team_name, user_names):
         print('Aborting')
         return 1
 
-    gh_token, _ = get_github_token()
-    gh = login(token=gh_token)
-    org = gh.membership_in(GH_ORGANIZATION).organization
+    org = github_authenticate_and_fetch_org()
 
     team = None  # Fetch or create team
     for iteam in org.iter_teams():
@@ -971,6 +968,24 @@ def get_pivotaltracker_token():
             with open(token_file, 'w') as fd:
                 fd.write('{0}\n'.format(token))
     return token if token else None
+
+
+def github_authenticate_and_fetch_org():
+    """Authenticate to github and return the desired organization handle."""
+    from github3 import login
+    from github3.models import GitHubError
+
+    while True:
+        gh_token, _ = get_github_token()
+        gh = login(token=gh_token)
+        try:  # Test login
+            return gh.membership_in(GH_ORGANIZATION).organization
+        except GitHubError as exc:
+            if exc.code != 401:  # Bad Credentials
+                raise
+            print('{0}. Try again.'.format(exc.message))
+            os.unlink(os.path.expanduser('~/.config/github_creds'))
+    return org
 
 
 def main():
