@@ -361,7 +361,7 @@ echo "source /home/ec2-user/.py27/bin/activate" >> /home/ec2-user/.bashrc
 user_sudo pip install funkload\
  || error_exit 'Error installing funkload'
 """,
-            'tsung': """ 
+            'tsung': """
 # Install tsung environment
 echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
 echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
@@ -386,7 +386,7 @@ user_sudo make install
 user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin' > /etc/profile.d/erlang.sh
 user_sudo chmod +x /etc/profile.d/erlang.sh
 user_sudo pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin
-cd $HOME 
+cd $HOME
 user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.5.0.tar.gz
 user_sudo tar xzf tsung-1.5.0.tar.gz
 cd tsung-1.5.0
@@ -396,7 +396,7 @@ sudo cpan Template
 user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin' > /etc/profile.d/tsung.sh
 user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin' >> /etc/profile.d/tsung.sh
 sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
-# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack 
+# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack
 true || error_exit 'Error installing tsung'
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
@@ -986,7 +986,6 @@ def github_authenticate_and_fetch_org():
                 raise
             print('{0}. Try again.'.format(exc.message))
             os.unlink(os.path.expanduser('~/.config/github_creds'))
-    return org
 
 
 def main():
