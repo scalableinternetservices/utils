@@ -1035,7 +1035,9 @@ def main():
                 return retval
         return 0
     elif args['gh']:
-        return configure_github_team(team_name=args['TEAM'],
+        team = args['TEAM']
+        team = team[0] if isinstance(team, list) else team
+        return configure_github_team(team_name=team,
                                      user_names=args['USER'])
     else:
         raise Exception('Invalid state')
