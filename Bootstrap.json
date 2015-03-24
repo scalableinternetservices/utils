@@ -104,6 +104,7 @@
                 "pip install botocore\n",
                 "pip install github3.py\n",
                 "pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+                "user_sudo git clone https://github.com/scalableinternetservices/utils.git /home/ec2-user/utils\n",
                 "# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack ",
                 {
                   "Ref": "AWS::StackName"
