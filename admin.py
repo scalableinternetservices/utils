@@ -28,6 +28,7 @@ import os
 import random
 import string
 import sys
+import random
 
 
 # Update this value for your github organization.
@@ -944,10 +945,10 @@ def get_github_token():
         sys.stdout.flush()
         return sys.stdin.readline().strip()
 
-    user = getuser()
+    user = raw_input("Github admin username: ")
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
                      ['public_repo', 'admin:org'],
-                     'Scalable Internet Services Create Repo Script',
+                     'Scalable Internet Services Create Repo Script {0}'.format(random.randint(100, 999)),
                      'http://example.com',
                      two_factor_callback=two_factor_callback)
 
