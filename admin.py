@@ -7,7 +7,7 @@ Usage:
   admin aws-cleanup
   admin aws-purge TEAM...
   admin aws-update-all
-  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
+  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--puma] [--memcached]
   admin cftemplate funkload [--no-test]
   admin cftemplate tsung [--no-test]
   admin cftemplate passenger-ami
@@ -478,6 +478,13 @@ user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0 || error_exit
 user_sudo passenger start -d --no-compile-runtime\
  || error_exit 'Failed to start passenger'
 """,
+            'puma': """# Configure the app to serve static assets
+# Start up WEBrick (or whatever server is installed)
+echo -e "\ngem 'puma' " >> /home/ec2-user/app/Gemfile
+cd /home/ec2-user/app
+user_sudo "bundle install"
+user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d || error_exit 'Failed to start rails server'
+""",
             'passenger-install': """# Install Passenger
 gem install passenger rake || error_exit 'Failed to install passenger gems'
 # Add swap space needed to build passenger if running on t1.micro
@@ -640,6 +647,13 @@ fi
         self.add_parameter('Branch', default='master',
                            description='The git branch to deploy.')
 
+	if self.puma:
+          self.add_parameter('ProcessParallelism', default='1',
+                           description='The number of worker processes.')
+          self.add_parameter('ThreadParallelism', default='1',
+                           description='The number of threads within each worker processes.')
+        
+
         if self.multi:
             url = self.get_att('LoadBalancer', 'DNSName')
             self.add_parameter('AppInstances', 'Number', default=2,
@@ -760,7 +774,7 @@ fi
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
-    def generate_stack(self, app_ami, memcached, multi, passenger):
+    def generate_stack(self, app_ami, memcached, multi, passenger, puma):
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -772,6 +786,7 @@ fi
         :param passenger: (boolean) Use passenger standalone (nginx) as the
             entry-point into each app server rather than `rails s` (WEBrick by
             default).
+        :param puma: (boolean) Use puma instead of webrick.
         """
         # Update stack specific instance variables
         if app_ami:
@@ -779,6 +794,7 @@ fi
         self.memcached = memcached
         self.multi = multi
         self.passenger = passenger
+        self.puma = puma
         self.yum_packages = self.PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
@@ -788,7 +804,12 @@ fi
             self.yum_packages |= self.PACKAGES['passenger']
         name_parts = []
         name_parts.append('Multi' if multi else 'Single')
-        name_parts.append('Passenger' if passenger else 'WEBrick')
+	if passenger:
+          name_parts.append('Passenger')
+	elif puma:
+          name_parts.append('Puma')  
+	else:
+          name_parts.append('WEBrick')
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
@@ -812,7 +833,9 @@ fi
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
             sections.append('passenger')
-        else:
+	elif puma:
+            sections.append('puma')
+	else:
             sections.append('webrick')
         sections.append('postamble')
         resource = 'AppGroup' if self.multi else 'AppServer'
@@ -1033,7 +1056,8 @@ def main():
             return cf.generate_stack(app_ami=args['--app-ami'],
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
-                                     passenger=args['--passenger'])
+                                     passenger=args['--passenger'],
+                                     puma=args['--puma'])
     elif args['cftemplate-update-all']:
         bit_pos = ['passenger', 'multi', 'memcached']
         for i in range(2 ** len(bit_pos)):
