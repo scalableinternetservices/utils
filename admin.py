@@ -920,7 +920,7 @@ def configure_github_team(team_name, user_names):
             team = iteam
             break
     if team is None:
-        team = org.create_team(team_name, permission='push')
+        team = org.create_team(team_name, permission='admin')
 
     repo = None  # Fetch or create repository
     for irepo in org.iter_repos('public'):
