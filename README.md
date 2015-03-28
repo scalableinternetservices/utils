@@ -7,14 +7,14 @@ Both the app server, and database are located on a single EC2 instance.
 * __NGINX + Passenger__ (Recommended for regular testing):  
   NGINX handles requests to port 80 and passes connections to instances of the
   app through Passenger. Multiple concurrent connections are supported.  
-  https://s3-us-west-2.amazonaws.com/cs290/SinglePassenger-ami-c97227f9.json
+  https://scalableinternetservices.s3.amazonaws.com/SinglePassenger.json
 * __NGINX + Passenger + memcached__:  
   Same as above, with the addition of using memcached through the `dalli` gem.
-  https://s3-us-west-2.amazonaws.com/cs290/SinglePassengerMemcached-ami-c97227f9.json
+  https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
 * __WEBrick__ (Use only for slow-performance testing):  
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
-  https://s3-us-west-2.amazonaws.com/cs290/SingleWEBrick.json
+  https://scalableinternetservices.s3.amazonaws.com/SingleWEBrick.json
 
 
 ## Multiple Instance Templates
@@ -30,23 +30,32 @@ configured to work as described above for its corresponding type.
 
 ## Other Templates
 
-* __FunkLoad__:  
-  This instance provides an installed version of funkload at your disposal. You
-  will need to copy/rsync over your funkload tests.  
-  https://s3-us-west-2.amazonaws.com/cs290/FunkLoad.json
+* __Tsung__:  
+  This instance provides an installed version of Tsung at your disposal. You
+  will need to copy/rsync over your tsung xml tests.  
+  https://scalableinternetservices.s3.amazonaws.com/Tsung.json
 
 
 ## Running your own instance configuration
 
-Add the file `.ec2_initialize` to the root of your application's
+Add the file `.rails_initialize` to the root of your application's
 repository. This should contain commands that execute as the ec2-user just
 after to running `rake db:migrate`. Commands that require root should be
 prefixed with `sudo`. An example is provided below:
 
-__.ec2_initialize__
+__.rails_initialize__
+
+    rake db:seed
+
+If you need to execute commands before installing gems, add the file `.ec2_initialize` 
+to the root of your application's
+repository. This should contain commands that execute as the ec2-user just
+*before* running `rake db:migrate`. Commands that require root should be
+prefixed with `sudo`. An example is provided below:
+
+__.rails_initialize__
 
     sudo yum install -y ImageMagick
-    rake db:seed
 
 ## Configuring NGINX
 
