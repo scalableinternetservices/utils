@@ -11,6 +11,9 @@ Both the app server, and database are located on a single EC2 instance.
 * __NGINX + Passenger + memcached__:  
   Same as above, with the addition of using memcached through the `dalli` gem.
   https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
+* __Puma__:  
+  Puma allows both thread-based and process-based concurrency. 
+  https://scalableinternetservices.s3.amazonaws.com/SinglePassenger.json
 * __WEBrick__ (Use only for slow-performance testing):  
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
@@ -24,9 +27,14 @@ across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
 * __NGINX + Passenger__:  
-  https://s3-us-west-2.amazonaws.com/cs290/MultiPassenger-ami-c97227f9.json
+  https://scalableinternetservices.s3.amazonaws.com/MultiPassenger.json
 * __NGINX + Passenger + mecmached__:  
-  https://s3-us-west-2.amazonaws.com/cs290/MultiPassengerMemcached-ami-c97227f9.json
+  https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached.json
+
+* __Puma__:  
+  https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
+* __Puma + mecmached__:  
+  https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
 
 ## Other Templates
 
