@@ -48,7 +48,7 @@ configured to work as described above for its corresponding type.
 
 Add the file `.rails_initialize` to the root of your application's
 repository. This should contain commands that execute as the ec2-user just
-after to running `rake db:migrate`. Commands that require root should be
+after running `rake db:migrate`. Commands that require root should be
 prefixed with `sudo`. An example is provided below:
 
 __.rails_initialize__
@@ -61,7 +61,7 @@ repository. This should contain commands that execute as the ec2-user just
 *before* running `rake db:migrate`. Commands that require root should be
 prefixed with `sudo`. An example is provided below:
 
-__.rails_initialize__
+__.ec2_initialize__
 
     sudo yum install -y ImageMagick
 
