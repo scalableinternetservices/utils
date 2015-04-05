@@ -438,8 +438,10 @@ if [ -f .ec2_initialize ]; then
 fi
 
 # Add gems needed on production
-echo -e "\ngem 'therubyracer' " >> Gemfile
-echo -e "\ngem 'mysql2' " >> Gemfile
+echo -e "\ngem 'therubyracer', platforms: :ruby " >> Gemfile
+echo -e "\ngem 'mysql2', platforms: :ruby " >> Gemfile
+echo -e "\ngem 'therubyrhino', platforms: :jruby " >> Gemfile
+echo -e "\ngem 'activerecord-jdbc-adapter', platforms: :jruby " >> Gemfile
 
 # Run the remaining commands as the ec2-user in the app directory
 user_sudo bundle install --without test development\
