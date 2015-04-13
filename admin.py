@@ -698,7 +698,7 @@ fi
                         {'PolicyName': 'CookiePolicy',
                          'CookieExpirationPeriod': 30}],
                     'LoadBalancerName': self.get_ref('AWS::StackName'),
-                    'Listeners': [{'InstancePort': 80, 'LoadBalancerPort': 80,
+                    'Listeners': [{'InstancePort': 3000, 'LoadBalancerPort': 80,
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}]},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
