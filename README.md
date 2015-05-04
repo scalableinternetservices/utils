@@ -42,7 +42,7 @@ configured to work as described above for its corresponding type.
   This instance provides an installed version of Tsung at your disposal. You
   will need to copy/rsync over your tsung xml tests.  
   https://scalableinternetservices.s3.amazonaws.com/Tsung.json
-
+  https://scalableinternetservices.s3.amazonaws.com/SingleTsung-ami-f56657c5.json
 
 ## Running your own instance configuration
 
