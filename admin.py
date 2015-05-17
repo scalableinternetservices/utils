@@ -338,6 +338,7 @@ class CFTemplate(object):
     # escape intended brackets: '{' => '{{', '}' => '}}'
     INIT = {'preamble': """#!/bin/bash -v
 yum update -y aws-cfn-bootstrap
+yum update
 # Helper function
 function error_exit {{
     /opt/aws/bin/cfn-signal -e 1 -r "$1" --stack {AWS::StackName} \
