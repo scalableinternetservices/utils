@@ -713,7 +713,9 @@ fi
                     'LoadBalancerName': self.get_ref('AWS::StackName'),
                     'Listeners': [{'InstancePort': 3000, 'LoadBalancerPort': 80,
                                    'PolicyNames': ['CookiePolicy'],
-                                   'Protocol': 'http'}]},
+                                   'Protocol': 'http'}],
+                    'SecurityGroups': [self.get_map(
+                        'Teams', self.get_ref('TeamName'), 'sg')]},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
             if self.memcached:
                 self.add_parameter(
@@ -831,7 +833,7 @@ fi
             name_parts.append('-' + app_ami)
         self.name = ''.join(name_parts)
         if passenger and not app_ami:
-            self.create_timeout = 'PT20M'
+            self.create_timeout = 'PT40M'
 
         sections = ['preamble', 'ruby', 'rails']
         if self.memcached:
