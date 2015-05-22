@@ -27,11 +27,9 @@ across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
 * __NGINX + Passenger__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPassenger.json
-  faster version: https://scalableinternetservices.s3.amazonaws.com/MultiPassenger-ami-c5c4f9f5.json
+  https://scalableinternetservices.s3.amazonaws.com/MultiPassenger-ami-c5c4f9f5.json
 * __NGINX + Passenger + mecmached__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached.json
-  faster version: https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
+  https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
 * __Puma__:  
   https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
 * __Puma + mecmached__:  
