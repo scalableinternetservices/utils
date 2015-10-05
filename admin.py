@@ -353,7 +353,7 @@ function user_sudo {{
     sudo -u ec2-user bash -lc "$*"
 }}
 """,
-            'tsung_preamble': """# Install tsung environment
+            'tsung': """# Install tsung environment
 echo "*  soft  nofile  1024000" | tee -a /etc/security/limits.conf\
  || error_exit 'Error setting nofile limits'
 echo "*  hard  nofile  1024000" | tee -a /etc/security/limits.conf\
@@ -376,8 +376,8 @@ echo "net.ipv4.tcp_max_syn_backlog = 2048" | tee -a /etc/sysctl.conf\
  || error_exit 'Error setting sysctl config'
 echo "net.ipv4.tcp_syncookies = 1" | tee -a /etc/sysctl.conf\
  || error_exit 'Error setting sysctl config'
-sysctl -p""",
-            'tsung': """export HOME=/home/ec2-user/
+sysctl -p
+export HOME=/home/ec2-user/
 cd $HOME/
 user_sudo mkdir /home/ec2-user/opt
 user_sudo wget http://www.erlang.org/download/otp_src_R16B03-1.tar.gz
@@ -600,6 +600,17 @@ fi
             self._team_map = AWS().team_to_security_group()
         return self._team_map
 
+    def _add_cleanup_output(self):
+        clean = ['sudo yum clean all',
+                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
+                  '{} \;'),
+                 'sudo rm -f /root/.ssh/authorized_keys',
+                 'sudo rm -f /root/.bash_history',
+                 'rm -f /home/ec2-user/.ssh/authorized_keys',
+                 'rm -f /home/ec2-user/.bash_history']
+        self.add_output('Cleanup', 'Commands to run before making snapshot',
+                        '; '.join(clean))
+
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
@@ -768,35 +779,6 @@ fi
                         self.join('http://', url))
         self.add_apps()
 
-    def generate_tsung(self):
-        """Output the cloudformation template for a tsung instance."""
-        self.name = 'Tsung'
-        self.create_timeout = 'PT45M'
-        self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
-        self.add_ssh_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
-    def generate_tsung_ami(self):
-        self.name = 'TsungAMI'
-        self.create_timeout = 'PT45M'
-        self.test = False
-        self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
-        self.add_ssh_output()
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
     def generate_passenger_ami(self):
         """Output the template used to create an up-to-date passenger AMI."""
         self.name = 'PassengerAMI'
@@ -805,20 +787,11 @@ fi
         self.yum_packages = self.PACKAGES['passenger']
         sections = ['preamble', 'ruby', 'passenger-install', 'postamble']
         self.add_ssh_output()
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
+        self._add_cleanup_output()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
-    def generate_stack(self, app_ami, memcached, multi, passenger, puma,
-                       tsung):
+    def generate_stack(self, app_ami, memcached, multi, passenger, puma):
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -846,20 +819,26 @@ fi
                 self.yum_packages.add('memcached')
         if passenger and not app_ami:
             self.yum_packages |= self.PACKAGES['passenger']
+
         name_parts = []
+
+        # Identify stack plurality
         name_parts.append('Multi' if multi else 'Single')
+
+        # Identify AppServer
         if passenger:
             name_parts.append('Passenger')
         elif puma:
             name_parts.append('Puma')
-        elif tsung:
-            name_parts.append('Tsung')
         else:
             name_parts.append('WEBrick')
+
+        # Identify Addons
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
             name_parts.append('-' + app_ami)
+
         self.name = ''.join(name_parts)
         if passenger and not app_ami:
             self.create_timeout = 'PT40M'
@@ -879,13 +858,6 @@ fi
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
             sections.append('passenger')
-        elif tsung:
-            if app_ami:
-                name_parts.append('Tsung')
-                sections = ['preamble', 'ruby', 'tsung_preamble',
-                            'tsung_runtime']
-            else:
-                return cf.generate_tsung()
         elif puma:
             sections.append('puma')
         else:
@@ -940,6 +912,36 @@ fi
                 print(tmp)
                 return 0
         return 1
+
+    def generate_tsung(self, app_ami=None):
+        """Output the cloudformation template for a tsung instance.
+
+        :param app_ami: (str) The AMI to use for the tsung EC2 instance.
+
+        """
+        if app_ami:
+            self.ami = app_ami
+            sections = ['preamble', 'tsung_runtime', 'postamble']
+        else:
+            sections = ['preamble', 'tsung', 'postamble']
+        self.name = 'Tsung'
+        self.create_timeout = 'PT45M'
+        self.yum_packages = self.PACKAGES['tsung']
+        self.add_ssh_output()
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
+
+    def generate_tsung_ami(self):
+        """Output the template used to create an up-to-date tsung AMI."""
+        self.name = 'TsungAMI'
+        self.create_timeout = 'PT45M'
+        self.test = False
+        self.yum_packages = self.PACKAGES['tsung']
+        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
+        self.add_ssh_output()
+        self._add_cleanup_output()
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
 
 
 class UTC(tzinfo):
@@ -1101,6 +1103,8 @@ def main():
         cf = CFTemplate(test=not args['--no-test'])
         if args['passenger-ami']:
             return cf.generate_passenger_ami()
+        elif args['tsung']:
+            return cf.generate_tsung(app_ami=args['--app-ami'])
         elif args['tsung-ami']:
             return cf.generate_tsung_ami()
         else:
@@ -1108,8 +1112,7 @@ def main():
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
                                      passenger=args['--passenger'],
-                                     puma=args['--puma'],
-                                     tsung=args['tsung'])
+                                     puma=args['--puma'])
     elif args['cftemplate-update-all']:
         bit_pos = ['passenger', 'multi', 'memcached', 'puma']
         for i in range(2 ** len(bit_pos)):
