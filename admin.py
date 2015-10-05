@@ -29,7 +29,6 @@ import os
 import random
 import string
 import sys
-import random
 
 
 # Update this value for your github organization.
@@ -537,7 +536,7 @@ fi
   --region {AWS::Region}
 """}
     PACKAGES = {'funkload': {'gnuplot', 'python27'},
-                'tsung': {'gcc', 'python27', 'git', 'autoconf', 
+                'tsung': {'gcc', 'python27', 'git', 'autoconf',
                           'gnuplot',
                           'perl-CPAN', 'ncurses-devel', 'openssl-devel'},
                 'passenger': {'gcc-c++', 'libcurl-devel', 'make',
@@ -684,7 +683,7 @@ fi
                            description='The number of threads within each worker processes.')
           self.add_parameter('RubyVM', default='MRI', allowed=['MRI', 'JRuby'],
                            description='The number of threads within each worker processes.')
-        
+
 
         if self.multi:
             url = self.get_att('LoadBalancer', 'DNSName')
@@ -860,9 +859,9 @@ fi
 	if passenger:
           name_parts.append('Passenger')
 	elif puma:
-          name_parts.append('Puma')  
+          name_parts.append('Puma')
 	elif tsung:
-          name_parts.append('Tsung')  
+          name_parts.append('Tsung')
 	else:
           name_parts.append('WEBrick')
         if memcached:
@@ -1014,7 +1013,7 @@ def generate_password(length=16):
 
 def get_github_token():
     """Fetch and/or load API authorization token for Github."""
-    credential_file = os.path.expanduser('~/.config/github_creds')
+    credential_file = os.path.expanduser('~/.config/scalable_github_creds')
     if os.path.isfile(credential_file):
         with open(credential_file) as fd:
             token = fd.readline().strip()
@@ -1022,7 +1021,7 @@ def get_github_token():
             return token, auth_id
 
     from github3 import authorize
-    from getpass import getuser, getpass
+    from getpass import getpass
 
     def two_factor_callback():
         sys.stdout.write('Two factor token: ')
