@@ -8,7 +8,6 @@ Usage:
   admin aws-purge TEAM...
   admin aws-update-all
   admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--puma] [--memcached]
-  admin cftemplate funkload [--no-test]
   admin cftemplate tsung [--no-test] [--app-ami=ami]
   admin cftemplate passenger-ami
   admin cftemplate tsung-ami
@@ -354,15 +353,6 @@ function user_sudo {{
     sudo -u ec2-user bash -lc "$*"
 }}
 """,
-            'funkload': """# Install python2.7 environment
-sudo easy_install pip || error_exit 'Failure installing pip'
-sudo /usr/local/bin/pip install virtualenv || error_exit 'Failure installing virtualenv'
-user_sudo /usr/local/bin/virtualenv /home/ec2-user/.py27 -p /usr/bin/python27\
- || error_exit 'Error creating py27 virtualenv'
-echo "source /home/ec2-user/.py27/bin/activate" >> /home/ec2-user/.bashrc
-user_sudo pip install funkload\
- || error_exit 'Error installing funkload'
-""",
             'tsung': """
 # Install tsung environment
 echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
@@ -535,14 +525,13 @@ fi
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
   --region {AWS::Region}
 """}
-    PACKAGES = {'funkload': {'gnuplot', 'python27'},
-                'tsung': {'gcc', 'python27', 'git', 'autoconf',
-                          'gnuplot',
-                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'},
-                'passenger': {'gcc-c++', 'libcurl-devel', 'make',
+    PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
-                          'ruby21-devel'}}
+                          'ruby21-devel'},
+                'tsung': {'gcc', 'python27', 'git', 'autoconf',
+                          'gnuplot',
+                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -769,15 +758,6 @@ fi
         self.add_output('URL', 'The URL to the rails application.',
                         self.join('http://', url))
         self.add_apps()
-
-    def generate_funkload(self):
-        """Output the cloudformation template for a funkload instance."""
-        self.name = 'FunkLoad'
-        self.yum_packages = self.PACKAGES['funkload']
-        sections = ['preamble', 'funkload', 'postamble']
-        self.add_ssh_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
 
     def generate_tsung(self):
         """Output the cloudformation template for a tsung instance."""
@@ -1109,9 +1089,7 @@ def main():
         return 0
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
-        if args['funkload']:
-            return cf.generate_funkload()
-        elif args['passenger-ami']:
+        if args['passenger-ami']:
             return cf.generate_passenger_ami()
         elif args['tsung-ami']:
             return cf.generate_tsung_ami()
