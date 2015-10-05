@@ -401,7 +401,7 @@ sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home
 # All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack
 true || error_exit 'Error installing tsung'
 """,
-'tsung_runtime': """
+            'tsung_runtime': """
 echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
 echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
 echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
@@ -676,14 +676,16 @@ fi
         self.add_parameter('Branch', default='master',
                            description='The git branch to deploy.')
 
-	if self.puma:
-          self.add_parameter('ProcessParallelism', default='1',
-                           description='The number of worker processes.')
-          self.add_parameter('ThreadParallelism', default='1',
-                           description='The number of threads within each worker processes.')
-          self.add_parameter('RubyVM', default='MRI', allowed=['MRI', 'JRuby'],
-                           description='The number of threads within each worker processes.')
-
+        if self.puma:
+            self.add_parameter('ProcessParallelism', default='1',
+                               description='The number of worker processes.')
+            self.add_parameter('ThreadParallelism', default='1',
+                               description=('The number of threads within each'
+                                            ' worker processes.'))
+            self.add_parameter('RubyVM', default='MRI',
+                               allowed=['MRI', 'JRuby'],
+                               description=('The number of threads within each'
+                                            ' worker processes.'))
 
         if self.multi:
             url = self.get_att('LoadBalancer', 'DNSName')
@@ -789,11 +791,11 @@ fi
 
     def generate_tsung_ami(self):
         self.name = 'TsungAMI'
-	self.create_timeout = 'PT45M'
-	self.test = False
-	self.yum_packages = self.PACKAGES['tsung']
-	sections = ['preamble', 'tsung', 'postamble']
-	self.add_ssh_output()
+        self.create_timeout = 'PT45M'
+        self.test = False
+        self.yum_packages = self.PACKAGES['tsung']
+        sections = ['preamble', 'tsung', 'postamble']
+        self.add_ssh_output()
         clean = ['sudo yum clean all',
                  ('sudo find /var/log -type f -exec sudo truncate --size 0 '
                   '{} \;'),
@@ -826,7 +828,8 @@ fi
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
-    def generate_stack(self, app_ami, memcached, multi, passenger, puma, tsung):
+    def generate_stack(self, app_ami, memcached, multi, passenger, puma,
+                       tsung):
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -856,14 +859,14 @@ fi
             self.yum_packages |= self.PACKAGES['passenger']
         name_parts = []
         name_parts.append('Multi' if multi else 'Single')
-	if passenger:
-          name_parts.append('Passenger')
-	elif puma:
-          name_parts.append('Puma')
-	elif tsung:
-          name_parts.append('Tsung')
-	else:
-          name_parts.append('WEBrick')
+        if passenger:
+            name_parts.append('Passenger')
+        elif puma:
+            name_parts.append('Puma')
+        elif tsung:
+            name_parts.append('Tsung')
+        else:
+            name_parts.append('WEBrick')
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
@@ -888,14 +891,14 @@ fi
                 sections.append('passenger-install')
             sections.append('passenger')
         elif tsung:
-	    if app_ami:
-              name_parts.append('Tsung')
-	      sections = ['preamble', 'ruby', 'tsung_runtime']
-	    else:
-              return cf.generate_tsung()
-	elif puma:
+            if app_ami:
+                name_parts.append('Tsung')
+                sections = ['preamble', 'ruby', 'tsung_runtime']
+            else:
+                return cf.generate_tsung()
+        elif puma:
             sections.append('puma')
-	else:
+        else:
             sections.append('webrick')
         sections.append('postamble')
         resource = 'AppGroup' if self.multi else 'AppServer'
@@ -1031,8 +1034,8 @@ def get_github_token():
     user = raw_input("Github admin username: ")
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
                      ['public_repo', 'admin:org'],
-                     'Scalable Internet Services Create Repo Script {0}'.format(random.randint(100, 999)),
-                     'http://example.com',
+                     'Scalable Internet Services Create Repo Script {0}'
+                     .format(random.randint(100, 999)), 'http://example.com',
                      two_factor_callback=two_factor_callback)
 
     with open(credential_file, 'w') as fd:
@@ -1118,7 +1121,7 @@ def main():
                                      multi=args['--multi'],
                                      passenger=args['--passenger'],
                                      puma=args['--puma'],
-				     tsung=args['tsung'])
+                                     tsung=args['tsung'])
     elif args['cftemplate-update-all']:
         bit_pos = ['passenger', 'multi', 'memcached', 'puma']
         for i in range(2 ** len(bit_pos)):
