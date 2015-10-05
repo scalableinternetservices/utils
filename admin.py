@@ -353,21 +353,31 @@ function user_sudo {{
     sudo -u ec2-user bash -lc "$*"
 }}
 """,
-            'tsung': """
-# Install tsung environment
-echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.wmem_max = 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_wmem = 4096 65536 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_mem = 50576 64768 98152" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.netdev_max_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.somaxconn = 1024" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_max_syn_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-sysctl -p
-export HOME=/home/ec2-user/
+            'tsung_preamble': """# Install tsung environment
+echo "*  soft  nofile  1024000" | tee -a /etc/security/limits.conf\
+ || error_exit 'Error setting nofile limits'
+echo "*  hard  nofile  1024000" | tee -a /etc/security/limits.conf\
+ || error_exit 'Error setting nofile limits'
+echo "net.core.rmem_max = 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.wmem_max = 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_wmem = 4096 65536 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_mem = 50576 64768 98152" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.netdev_max_backlog = 2048" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.somaxconn = 1024" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_max_syn_backlog = 2048" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_syncookies = 1" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+sysctl -p""",
+            'tsung': """export HOME=/home/ec2-user/
 cd $HOME/
 user_sudo mkdir /home/ec2-user/opt
 user_sudo wget http://www.erlang.org/download/otp_src_R16B03-1.tar.gz
@@ -375,7 +385,8 @@ user_sudo tar xzf otp_src_R16B03-1.tar.gz
 cd otp_src_R16B03-1
 user_sudo ./configure --prefix=/home/ec2-user/opt/erlang-R16B03-1
 user_sudo make install
-user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin' > /etc/profile.d/erlang.sh
+user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin'\
+ > /etc/profile.d/erlang.sh
 user_sudo chmod +x /etc/profile.d/erlang.sh
 user_sudo pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin
 cd $HOME
@@ -384,28 +395,20 @@ user_sudo tar xzf tsung-1.5.0.tar.gz
 cd tsung-1.5.0
 user_sudo ./configure --prefix=$HOME/opt/tsung-1.5.0
 user_sudo make install
-sudo cpan Template
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin' > /etc/profile.d/tsung.sh
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin' >> /etc/profile.d/tsung.sh
-sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
-# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack
+cpan Template
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin'\
+ > /etc/profile.d/tsung.sh
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin'\
+ >> /etc/profile.d/tsung.sh
+ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
+ '/home/ec2-user/.tsung/log').start" &
+# All is well so signal success
+/opt/aws/bin/cfn-signal -e 0 --stack
 true || error_exit 'Error installing tsung'
 """,
-            'tsung_runtime': """
-echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.wmem_max = 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_wmem = 4096 65536 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_mem = 50576 64768 98152" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.netdev_max_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.somaxconn = 1024" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_max_syn_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-sysctl -p
-export HOME=/home/ec2-user/
-sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
+            'tsung_runtime': """export HOME=/home/ec2-user/
+ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
+ '/home/ec2-user/.tsung/log').start" &
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
@@ -481,7 +484,8 @@ user_sudo rake assets:precompile\
 """,
             'webrick': """# Configure the app to serve static assets
 # Start up WEBrick (or whatever server is installed)
-user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0 || error_exit 'Failed to start rails server'
+user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0\
+ || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
 user_sudo passenger start -d --no-compile-runtime\
@@ -491,7 +495,8 @@ user_sudo passenger start -d --no-compile-runtime\
 echo -e "\ngem 'puma' " >> /home/ec2-user/app/Gemfile
 cd /home/ec2-user/app
 if [ '{RubyVM}' == 'JRuby' ]; then
-  gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+  gpg --keyserver hkp://keys.gnupg.net\
+   --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
   curl -sSL https://get.rvm.io | bash -s stable
   echo "source /home/ec2-user/.profile" >> /home/ec2-user/.bash_profile
   source /home/ec2-user/.profile
@@ -499,10 +504,13 @@ if [ '{RubyVM}' == 'JRuby' ]; then
   rvm --default use jruby-1.7.19
   sudo yum install mysql-connector-java
   echo "\$CLASSPATH ||= [] " >> config/application.rb;
-  echo "\$CLASSPATH << '/usr/share/java/mysql-connector-java.jar'" >> config/application.rb;
+  echo "\$CLASSPATH << '/usr/share/java/mysql-connector-java.jar'"\
+    >> config/application.rb;
 fi
 user_sudo "bundle install"
-user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d || error_exit 'Failed to start rails server'
+user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma\
+ -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d\
+ || error_exit 'Failed to start rails server'
 """,
             'passenger-install': """# Install Passenger
 gem install passenger rake || error_exit 'Failed to install passenger gems'
@@ -718,7 +726,8 @@ fi
                         {'PolicyName': 'CookiePolicy',
                          'CookieExpirationPeriod': 30}],
                     'LoadBalancerName': self.get_ref('AWS::StackName'),
-                    'Listeners': [{'InstancePort': 3000, 'LoadBalancerPort': 80,
+                    'Listeners': [{'InstancePort': 3000,
+                                   'LoadBalancerPort': 80,
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}],
                     'SecurityGroups': [self.get_map(
@@ -764,7 +773,7 @@ fi
         self.name = 'Tsung'
         self.create_timeout = 'PT45M'
         self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung', 'postamble']
+        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
         self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
@@ -774,7 +783,7 @@ fi
         self.create_timeout = 'PT45M'
         self.test = False
         self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung', 'postamble']
+        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
         self.add_ssh_output()
         clean = ['sudo yum clean all',
                  ('sudo find /var/log -type f -exec sudo truncate --size 0 '
@@ -873,7 +882,8 @@ fi
         elif tsung:
             if app_ami:
                 name_parts.append('Tsung')
-                sections = ['preamble', 'ruby', 'tsung_runtime']
+                sections = ['preamble', 'ruby', 'tsung_preamble',
+                            'tsung_runtime']
             else:
                 return cf.generate_tsung()
         elif puma:
