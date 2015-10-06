@@ -8,7 +8,6 @@ Usage:
   admin aws-purge TEAM...
   admin aws-update-all
   admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--puma] [--memcached]
-  admin cftemplate funkload [--no-test]
   admin cftemplate tsung [--no-test] [--app-ami=ami]
   admin cftemplate passenger-ami
   admin cftemplate tsung-ami
@@ -29,7 +28,6 @@ import os
 import random
 import string
 import sys
-import random
 
 
 # Update this value for your github organization.
@@ -355,28 +353,29 @@ function user_sudo {{
     sudo -u ec2-user bash -lc "$*"
 }}
 """,
-            'funkload': """# Install python2.7 environment
-sudo easy_install pip || error_exit 'Failure installing pip'
-sudo /usr/local/bin/pip install virtualenv || error_exit 'Failure installing virtualenv'
-user_sudo /usr/local/bin/virtualenv /home/ec2-user/.py27 -p /usr/bin/python27\
- || error_exit 'Error creating py27 virtualenv'
-echo "source /home/ec2-user/.py27/bin/activate" >> /home/ec2-user/.bashrc
-user_sudo pip install funkload\
- || error_exit 'Error installing funkload'
-""",
-            'tsung': """
-# Install tsung environment
-echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.wmem_max = 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_wmem = 4096 65536 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_mem = 50576 64768 98152" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.netdev_max_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.somaxconn = 1024" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_max_syn_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
+            'tsung': """# Install tsung environment
+echo "*  soft  nofile  1024000" | tee -a /etc/security/limits.conf\
+ || error_exit 'Error setting nofile limits'
+echo "*  hard  nofile  1024000" | tee -a /etc/security/limits.conf\
+ || error_exit 'Error setting nofile limits'
+echo "net.core.rmem_max = 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.wmem_max = 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_wmem = 4096 65536 16777216" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_mem = 50576 64768 98152" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.netdev_max_backlog = 2048" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.core.somaxconn = 1024" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_max_syn_backlog = 2048" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
+echo "net.ipv4.tcp_syncookies = 1" | tee -a /etc/sysctl.conf\
+ || error_exit 'Error setting sysctl config'
 sysctl -p
 export HOME=/home/ec2-user/
 cd $HOME/
@@ -386,7 +385,8 @@ user_sudo tar xzf otp_src_R16B03-1.tar.gz
 cd otp_src_R16B03-1
 user_sudo ./configure --prefix=/home/ec2-user/opt/erlang-R16B03-1
 user_sudo make install
-user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin' > /etc/profile.d/erlang.sh
+user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin'\
+ > /etc/profile.d/erlang.sh
 user_sudo chmod +x /etc/profile.d/erlang.sh
 user_sudo pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin
 cd $HOME
@@ -395,28 +395,20 @@ user_sudo tar xzf tsung-1.5.0.tar.gz
 cd tsung-1.5.0
 user_sudo ./configure --prefix=$HOME/opt/tsung-1.5.0
 user_sudo make install
-sudo cpan Template
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin' > /etc/profile.d/tsung.sh
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin' >> /etc/profile.d/tsung.sh
-sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
-# All is well so signal success\n/opt/aws/bin/cfn-signal -e 0 --stack
+cpan Template
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin'\
+ > /etc/profile.d/tsung.sh
+user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin'\
+ >> /etc/profile.d/tsung.sh
+ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
+ '/home/ec2-user/.tsung/log').start" &
+# All is well so signal success
+/opt/aws/bin/cfn-signal -e 0 --stack
 true || error_exit 'Error installing tsung'
 """,
-'tsung_runtime': """
-echo "*  soft  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "*  hard  nofile  1024000" | sudo tee -a /etc/security/limits.conf || error_exit 'Error setting nofile limits'
-echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.wmem_max = 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_wmem = 4096 65536 16777216"  | sudo tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_mem = 50576 64768 98152" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.netdev_max_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.core.somaxconn = 1024" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_max_syn_backlog = 2048" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a  /etc/sysctl.conf || error_exit 'Error setting sysctl config'
-sysctl -p
-export HOME=/home/ec2-user/
-sudo ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
+            'tsung_runtime': """export HOME=/home/ec2-user/
+ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
+ '/home/ec2-user/.tsung/log').start" &
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
@@ -492,7 +484,8 @@ user_sudo rake assets:precompile\
 """,
             'webrick': """# Configure the app to serve static assets
 # Start up WEBrick (or whatever server is installed)
-user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0 || error_exit 'Failed to start rails server'
+user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0\
+ || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
 user_sudo passenger start -d --no-compile-runtime\
@@ -502,7 +495,8 @@ user_sudo passenger start -d --no-compile-runtime\
 echo -e "\ngem 'puma' " >> /home/ec2-user/app/Gemfile
 cd /home/ec2-user/app
 if [ '{RubyVM}' == 'JRuby' ]; then
-  gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+  gpg --keyserver hkp://keys.gnupg.net\
+   --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
   curl -sSL https://get.rvm.io | bash -s stable
   echo "source /home/ec2-user/.profile" >> /home/ec2-user/.bash_profile
   source /home/ec2-user/.profile
@@ -510,10 +504,13 @@ if [ '{RubyVM}' == 'JRuby' ]; then
   rvm --default use jruby-1.7.19
   sudo yum install mysql-connector-java
   echo "\$CLASSPATH ||= [] " >> config/application.rb;
-  echo "\$CLASSPATH << '/usr/share/java/mysql-connector-java.jar'" >> config/application.rb;
+  echo "\$CLASSPATH << '/usr/share/java/mysql-connector-java.jar'"\
+    >> config/application.rb;
 fi
 user_sudo "bundle install"
-user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d || error_exit 'Failed to start rails server'
+user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma\
+ -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d\
+ || error_exit 'Failed to start rails server'
 """,
             'passenger-install': """# Install Passenger
 gem install passenger rake || error_exit 'Failed to install passenger gems'
@@ -536,14 +533,13 @@ fi
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
   --region {AWS::Region}
 """}
-    PACKAGES = {'funkload': {'gnuplot', 'python27'},
-                'tsung': {'gcc', 'python27', 'git', 'autoconf', 
-                          'gnuplot',
-                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'},
-                'passenger': {'gcc-c++', 'libcurl-devel', 'make',
+    PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
-                          'ruby21-devel'}}
+                          'ruby21-devel'},
+                'tsung': {'gcc', 'python27', 'git', 'autoconf',
+                          'gnuplot',
+                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -603,6 +599,17 @@ fi
         if self._team_map is None:
             self._team_map = AWS().team_to_security_group()
         return self._team_map
+
+    def _add_cleanup_output(self):
+        clean = ['sudo yum clean all',
+                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
+                  '{} \;'),
+                 'sudo rm -f /root/.ssh/authorized_keys',
+                 'sudo rm -f /root/.bash_history',
+                 'rm -f /home/ec2-user/.ssh/authorized_keys',
+                 'rm -f /home/ec2-user/.bash_history']
+        self.add_output('Cleanup', 'Commands to run before making snapshot',
+                        '; '.join(clean))
 
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
@@ -677,14 +684,16 @@ fi
         self.add_parameter('Branch', default='master',
                            description='The git branch to deploy.')
 
-	if self.puma:
-          self.add_parameter('ProcessParallelism', default='1',
-                           description='The number of worker processes.')
-          self.add_parameter('ThreadParallelism', default='1',
-                           description='The number of threads within each worker processes.')
-          self.add_parameter('RubyVM', default='MRI', allowed=['MRI', 'JRuby'],
-                           description='The number of threads within each worker processes.')
-        
+        if self.puma:
+            self.add_parameter('ProcessParallelism', default='1',
+                               description='The number of worker processes.')
+            self.add_parameter('ThreadParallelism', default='1',
+                               description=('The number of threads within each'
+                                            ' worker processes.'))
+            self.add_parameter('RubyVM', default='MRI',
+                               allowed=['MRI', 'JRuby'],
+                               description=('The number of threads within each'
+                                            ' worker processes.'))
 
         if self.multi:
             url = self.get_att('LoadBalancer', 'DNSName')
@@ -728,7 +737,8 @@ fi
                         {'PolicyName': 'CookiePolicy',
                          'CookieExpirationPeriod': 30}],
                     'LoadBalancerName': self.get_ref('AWS::StackName'),
-                    'Listeners': [{'InstancePort': 3000, 'LoadBalancerPort': 80,
+                    'Listeners': [{'InstancePort': 3000,
+                                   'LoadBalancerPort': 80,
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}],
                     'SecurityGroups': [self.get_map(
@@ -769,44 +779,6 @@ fi
                         self.join('http://', url))
         self.add_apps()
 
-    def generate_funkload(self):
-        """Output the cloudformation template for a funkload instance."""
-        self.name = 'FunkLoad'
-        self.yum_packages = self.PACKAGES['funkload']
-        sections = ['preamble', 'funkload', 'postamble']
-        self.add_ssh_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
-    def generate_tsung(self):
-        """Output the cloudformation template for a tsung instance."""
-        self.name = 'Tsung'
-        self.create_timeout = 'PT45M'
-        self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung', 'postamble']
-        self.add_ssh_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
-    def generate_tsung_ami(self):
-        self.name = 'TsungAMI'
-	self.create_timeout = 'PT45M'
-	self.test = False
-	self.yum_packages = self.PACKAGES['tsung']
-	sections = ['preamble', 'tsung', 'postamble']
-	self.add_ssh_output()
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
     def generate_passenger_ami(self):
         """Output the template used to create an up-to-date passenger AMI."""
         self.name = 'PassengerAMI'
@@ -815,19 +787,11 @@ fi
         self.yum_packages = self.PACKAGES['passenger']
         sections = ['preamble', 'ruby', 'passenger-install', 'postamble']
         self.add_ssh_output()
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
+        self._add_cleanup_output()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
-    def generate_stack(self, app_ami, memcached, multi, passenger, puma, tsung):
+    def generate_stack(self, app_ami, memcached, multi, passenger, puma):
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -855,20 +819,26 @@ fi
                 self.yum_packages.add('memcached')
         if passenger and not app_ami:
             self.yum_packages |= self.PACKAGES['passenger']
+
         name_parts = []
+
+        # Identify stack plurality
         name_parts.append('Multi' if multi else 'Single')
-	if passenger:
-          name_parts.append('Passenger')
-	elif puma:
-          name_parts.append('Puma')  
-	elif tsung:
-          name_parts.append('Tsung')  
-	else:
-          name_parts.append('WEBrick')
+
+        # Identify AppServer
+        if passenger:
+            name_parts.append('Passenger')
+        elif puma:
+            name_parts.append('Puma')
+        else:
+            name_parts.append('WEBrick')
+
+        # Identify Addons
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
             name_parts.append('-' + app_ami)
+
         self.name = ''.join(name_parts)
         if passenger and not app_ami:
             self.create_timeout = 'PT40M'
@@ -888,15 +858,9 @@ fi
             else:  # Template installs passenger (this is slow)
                 sections.append('passenger-install')
             sections.append('passenger')
-        elif tsung:
-	    if app_ami:
-              name_parts.append('Tsung')
-	      sections = ['preamble', 'ruby', 'tsung_runtime']
-	    else:
-              return cf.generate_tsung()
-	elif puma:
+        elif puma:
             sections.append('puma')
-	else:
+        else:
             sections.append('webrick')
         sections.append('postamble')
         resource = 'AppGroup' if self.multi else 'AppServer'
@@ -948,6 +912,36 @@ fi
                 print(tmp)
                 return 0
         return 1
+
+    def generate_tsung(self, app_ami=None):
+        """Output the cloudformation template for a tsung instance.
+
+        :param app_ami: (str) The AMI to use for the tsung EC2 instance.
+
+        """
+        if app_ami:
+            self.ami = app_ami
+            sections = ['preamble', 'tsung_runtime', 'postamble']
+        else:
+            sections = ['preamble', 'tsung', 'postamble']
+        self.name = 'Tsung'
+        self.create_timeout = 'PT45M'
+        self.yum_packages = self.PACKAGES['tsung']
+        self.add_ssh_output()
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
+
+    def generate_tsung_ami(self):
+        """Output the template used to create an up-to-date tsung AMI."""
+        self.name = 'TsungAMI'
+        self.create_timeout = 'PT45M'
+        self.test = False
+        self.yum_packages = self.PACKAGES['tsung']
+        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
+        self.add_ssh_output()
+        self._add_cleanup_output()
+        return self.generate_template(sections, 'AppServer',
+                                      self.callback_single_server)
 
 
 class UTC(tzinfo):
@@ -1014,7 +1008,7 @@ def generate_password(length=16):
 
 def get_github_token():
     """Fetch and/or load API authorization token for Github."""
-    credential_file = os.path.expanduser('~/.config/github_creds')
+    credential_file = os.path.expanduser('~/.config/scalable_github_creds')
     if os.path.isfile(credential_file):
         with open(credential_file) as fd:
             token = fd.readline().strip()
@@ -1022,7 +1016,7 @@ def get_github_token():
             return token, auth_id
 
     from github3 import authorize
-    from getpass import getuser, getpass
+    from getpass import getpass
 
     def two_factor_callback():
         sys.stdout.write('Two factor token: ')
@@ -1032,8 +1026,8 @@ def get_github_token():
     user = raw_input("Github admin username: ")
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
                      ['public_repo', 'admin:org'],
-                     'Scalable Internet Services Create Repo Script {0}'.format(random.randint(100, 999)),
-                     'http://example.com',
+                     'Scalable Internet Services Create Repo Script {0}'
+                     .format(random.randint(100, 999)), 'http://example.com',
                      two_factor_callback=two_factor_callback)
 
     with open(credential_file, 'w') as fd:
@@ -1107,10 +1101,10 @@ def main():
         return 0
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
-        if args['funkload']:
-            return cf.generate_funkload()
-        elif args['passenger-ami']:
+        if args['passenger-ami']:
             return cf.generate_passenger_ami()
+        elif args['tsung']:
+            return cf.generate_tsung(app_ami=args['--app-ami'])
         elif args['tsung-ami']:
             return cf.generate_tsung_ami()
         else:
@@ -1118,8 +1112,7 @@ def main():
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
                                      passenger=args['--passenger'],
-                                     puma=args['--puma'],
-				     tsung=args['tsung'])
+                                     puma=args['--puma'])
     elif args['cftemplate-update-all']:
         bit_pos = ['passenger', 'multi', 'memcached', 'puma']
         for i in range(2 ** len(bit_pos)):
