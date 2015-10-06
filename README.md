@@ -85,7 +85,7 @@ json dictionary in `Passengerfile.json`:
 Then create the file `nginx.conf` in the root of your repository with whatever
 NGINX configuration you require.
 
-# admin.py
+# scalable_admin.py
 
 Provides the functionality necessary to administrate github and AWS for the
 purposes of CS290 classes.
@@ -95,7 +95,7 @@ purposes of CS290 classes.
 
 __Resolve python dependencies via__:
 
-    pip install botocore docopt github3.py
+    python setup.py install
 
 __Configure AWS credentials by creating/editing the file `~/.aws/credentials`
 so that it contains an `admin` section__:
@@ -112,7 +112,7 @@ you issue a `gh` command. An access token will be saved to
 `~/.config/github_creds`. The github account you use should have admin rights
 to the github organization.
 
-__Update _constant_ values in `admin.py`__:
+__Update _constant_ values in `scalable_admin.py`__:
 
 * __GH_ORGANIZATION__: If you are using a different github organization, change
   this value to reflect your organization. This will permit the following
@@ -124,31 +124,31 @@ __Update _constant_ values in `admin.py`__:
 
 ## Commands
 
-### ./admin.py aws TEAM...
+### ./scalable_admin.py aws TEAM...
 
 Use this command to configure the AWS permissions for one ore more
 teams. On first run for a team this command will create the account, outputting
 the newly created credentials, and create the team's keypair file: `TEAM.pem`.
 
 Subsequent runs can be used to make updates to a team's permissions. This is
-only necessary if the permission settings have been modified in the `admin.py`
-file.
+only necessary if the permission settings have been modified in the
+`scalable_admin.py` file.
 
-### ./admin.py aws-cleanup
+### ./scalable_admin.py aws-cleanup
 
 This command will delete stacks that are more than 8 hours old. It is useful to
 run this as a cron job. The following crontab entry will run this command every
 hour on the 31st minute:
 
-    31 * * * * /path/to/the/script/utils/admin.py aws-cleanup
+    31 * * * * /path/to/the/script/utils/scalable_admin.py aws-cleanup
 
-### ./admin.py aws-purge TEAM...
+### ./scalable_admin.py aws-purge TEAM...
 
 Use this command to completely remove one or more teams' permissions. This
 command may fail if the AWS user for the team was manually modified through the
 IAM web interface.
 
-### ./admin.py aws-update-all
+### ./scalable_admin.py aws-update-all
 
 Use this command to update the permissions for all teams. The list of teams is
 dynamically determined from the security group names excluding those that begin
@@ -157,9 +157,9 @@ with `default`.
 ### ./admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
 
 This command will generate a cloud formation template usable by any of the
-teams configured via `admin.py aws TEAM...`. On success, the S3 url to the
-generated cloudformation template will be output. The templates will be stored
-in `S3_BUCKET`.
+teams configured via `scalable_admin.py aws TEAM...`. On success, the S3 url to
+the generated cloudformation template will be output. The templates will be
+stored in `S3_BUCKET`.
 
 __Note__: Regenerating templates will overwrite existing templates. Hence, by
 default, template names (before the `.json` extension) are suffixed with
@@ -187,17 +187,12 @@ The `--memached` flag will add memcached to the stack. When used in combination
 with `--multi`, memcached will run on its own instance, otherwise it'll share
 the same EC2 instance with the app server and database.
 
-### ./admin.py cftemplate funkload [--no-test]
-
-Generate a cloudformation template to generate stacks that run the load testing
-tool tsung. The `--no-test` flag works as described above.
-
-### ./admin.py cftemplate tsung [--no-test]
+### ./scalable_admin.py cftemplate tsung [--no-test]
 
 Generate a cloudformation template to generate stacks that run the load testing
 tool funkload. The `--no-test` flag works as described above.
 
-### ./admin.py cftemplate passenger-ami
+### ./scalable_admin.py cftemplate passenger-ami
 
 Generate a cloudformation template useful to build a passenger ami. This
 template specifies an EC2 instance that precompiles passenger on launch, and
@@ -205,12 +200,12 @@ cleans up the environment so that an AMI can be immediately generated following
 this document:
 http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html
 
-### ./admin.py cftemplate-update-all [--no-test] [--passenger-ami=ami]
+### ./scalable_admin.py cftemplate-update-all [--no-test] [--passenger-ami=ami]
 
 Update all permutations of the APP-based stacks. The `--pasenger-ami` flag is
 used to set the AMI for all permutations involving passenger.
 
-### ./admin.py gh TEAM USER...
+### ./scalable_admin.py gh TEAM USER...
 
 Use this command to create a git repository, if it does not already exist, and
 add invite list of github USERs to the repository if they have not already been
