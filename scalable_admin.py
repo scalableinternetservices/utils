@@ -30,6 +30,9 @@ import string
 import sys
 
 
+__version__ = '0.1'
+
+
 # Update this value for your github organization.
 GH_ORGANIZATION = 'scalableinternetservices'
 
@@ -970,7 +973,7 @@ def configure_github_team(team_name, user_names):
     org = github_authenticate_and_fetch_org()
 
     team = None  # Fetch or create team
-    for iteam in org.iter_teams():
+    for iteam in org.teams():
         if iteam.name == team_name:
             team = iteam
             break
@@ -978,14 +981,14 @@ def configure_github_team(team_name, user_names):
         team = org.create_team(team_name, permission='admin')
 
     repo = None  # Fetch or create repository
-    for irepo in org.iter_repos('public'):
+    for irepo in org.repositories('public'):
         if irepo.name == team_name:
             repo = irepo
             break
     if repo is None:  # Create repo and associate with the team
-        repo = org.create_repo(team_name, has_wiki=False,
-                               has_downloads=False, team_id=team.id)
-    elif team not in list(repo.iter_teams()):
+        repo = org.create_repository(team_name, has_wiki=False,
+                                     team_id=team.id)
+    elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
 
     # Add PT integration hook
@@ -1052,8 +1055,7 @@ def get_pivotaltracker_token():
 
 def github_authenticate_and_fetch_org():
     """Authenticate to github and return the desired organization handle."""
-    from github3 import login
-    from github3.models import GitHubError
+    from github3 import GitHubError, login
 
     while True:
         gh_token, _ = get_github_token()
