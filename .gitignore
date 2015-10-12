@@ -1,4 +1,5 @@
 *.egg-info/
 *.pem
 *.pyc
+*.txt
 conf/
