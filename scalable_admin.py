@@ -18,11 +18,13 @@ Usage:
 """  # NOQA
 
 from __future__ import print_function
-import copy
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
 from pprint import pprint
 from string import Formatter
+import botocore.exceptions
+import botocore.session
+import copy
 import json
 import os
 import random
@@ -81,16 +83,20 @@ class AWS(object):
     PROFILE = 'admin'
 
     @staticmethod
-    def op(serv, operation, debug_output=True, **kwargs):
+    def op(method, debug_output=True, **kwargs):
         """Execute an AWS operation and check the response status."""
-        code, data = serv[0].get_operation(operation).call(serv[1], **kwargs)
-        if code.status_code == 200:
-            if debug_output:
-                print('Success: {0} {1}'.format(operation, kwargs))
-            return data
-        else:
-            print(data['Error']['Message'])
+        try:
+            response = method(**kwargs)
+        except botocore.exceptions.ClientError as exc:
+            sys.stderr.write(exc.message)
+            sys.stderr.write('\n')
             return False
+        except:
+            raise
+        if debug_output:
+            sys.stderr.write('Success: {0} {1}\n'
+                             .format(method.__name__, kwargs))
+        return response
 
     @staticmethod
     def operation_list(service_name):
@@ -100,21 +106,19 @@ class AWS(object):
 
     def __init__(self):
         """Initialize the AWS class."""
-        import botocore.session
-        self.aws = botocore.session.get_session()
-        self.aws.profile = self.PROFILE
-        self.ec2 = self.get_service('ec2', self.REGION)
-        self.iam = self.get_service('iam', None)
+        self.aws = botocore.session.Session(profile=self.PROFILE)
+        self.ec2 = self.aws.create_client('ec2', self.REGION)
+        self.iam = self.aws.create_client('iam', None)
 
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
-        cf = self.get_service('cloudformation', self.REGION)
+        cf = self.aws.create_client('cloudformation', self.REGION)
         now = datetime.now(UTC())
-        for stack in self.op(cf, 'ListStacks', False)['StackSummaries']:
+        for stack in self.op(cf.list_stacks, False)['StackSummaries']:
             if stack['StackStatus'] in {'DELETE_COMPLETE'}:
                 continue
             if now - stack['CreationTime'] > timedelta(hours=8):
-                self.op(cf, 'DeleteStack', StackName=stack['StackName'])
+                self.op(cf.delete_stack, StackName=stack['StackName'])
 
     def configure(self, team):
         """Create account and configure settings for a team.
@@ -136,51 +140,57 @@ class AWS(object):
             'Action': 'sts:AssumeRole',
             'Effect': 'Allow',
             'Principal': {'Service': 'ec2.amazonaws.com'}}}
-        self.op(self.iam, 'CreateInstanceProfile', InstanceProfileName=team)
-        self.op(self.iam, 'CreateRole', RoleName=team,
+        self.op(self.iam.create_instance_profile, InstanceProfileName=team)
+        self.op(self.iam.create_role, RoleName=team,
                 AssumeRolePolicyDocument=json.dumps(role_policy))
-        self.op(self.iam, 'AddRoleToInstanceProfile', RoleName=team,
+        self.op(self.iam.add_role_to_instance_profile, RoleName=team,
                 InstanceProfileName=team)
-        self.op(self.iam, 'PutRolePolicy', RoleName=team, PolicyName=team,
+        self.op(self.iam.put_role_policy, RoleName=team, PolicyName=team,
                 PolicyDocument=json.dumps({'Statement': s3_statement}))
 
         # Create IAM group if it does not exist
-        self.op(self.iam, 'CreateGroup', GroupName=self.GROUP)
-        self.op(self.iam, 'PutGroupPolicy', GroupName=self.GROUP,
+        self.op(self.iam.create_group, GroupName=self.GROUP)
+        self.op(self.iam.put_group_policy, GroupName=self.GROUP,
                 PolicyName=self.GROUP, PolicyDocument=json.dumps(self.POLICY))
 
         # Configure user account / password / access keys / keypair
-        if self.op(self.iam, 'CreateUser', UserName=team):
-            self.op(self.iam, 'CreateLoginProfile', UserName=team,
-                    Password=generate_password())
-            data = self.op(self.iam, 'CreateAccessKey', UserName=team)
+        if self.op(self.iam.create_user, UserName=team):
+            password = generate_password()
+            self.op(self.iam.create_login_profile, UserName=team,
+                    Password=password)
+            data = self.op(self.iam.create_access_key, UserName=team)
             if data:
-                print('AccessKey: {0}'
-                      .format(data['AccessKey']['AccessKeyId']))
-                print('SecretKey: {0}'
-                      .format(data['AccessKey']['SecretAccessKey']))
-            data = self.op(self.ec2, 'CreateKeyPair', KeyName=team)
+                filename = '{0}.txt'.format(team)
+                with open(filename, 'w') as fp:
+                    fp.write('Username: {0}\n'.format(team))
+                    fp.write('Password: {0}\n'.format(password))
+                    fp.write('AccessKey: {0}\n'
+                             .format(data['AccessKey']['AccessKeyId']))
+                    fp.write('SecretKey: {0}\n'
+                             .format(data['AccessKey']['SecretAccessKey']))
+                print('Login and key info saved as: {0}'.format(filename))
+            data = self.op(self.ec2.create_key_pair, KeyName=team)
             if data:
                 filename = '{0}.pem'.format(team)
                 with open(filename, 'w') as fd:
                     os.chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
-        self.op(self.iam, 'AddUserToGroup', GroupName=self.GROUP,
+        self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
                 UserName=team)
 
         # Configure security group
-        self.op(self.ec2, 'CreateSecurityGroup', GroupName=team,
+        self.op(self.ec2.create_security_group, GroupName=team,
                 Description=team)
         for port in [22, 80, 443]:  # Open standard ports to all addresses.
             # These are run one at a time so that existance of one doesn't
             # prevent the creation of the others.
             rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
-            self.op(self.ec2, 'AuthorizeSecurityGroupIngress',
+            self.op(self.ec2.authorize_security_group_ingress,
                     GroupName=team, IpPermissions=[rule])
         # Permit all instances in the SecurityGroup to talk to each other
-        self.op(self.ec2, 'AuthorizeSecurityGroupIngress', GroupName=team,
+        self.op(self.ec2.authorize_security_group_ingress, GroupName=team,
                 IpPermissions=[
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
                      'UserIdGroupPairs': [{'GroupName': team}]}])
@@ -250,20 +260,15 @@ class AWS(object):
              'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
 
         # Create and associate TEAM group (can have longer policy lists)
-        self.op(self.iam, 'CreateGroup', GroupName=team)
-        self.op(self.iam, 'PutGroupPolicy', GroupName=team, PolicyName=team,
+        self.op(self.iam.create_group, GroupName=team)
+        self.op(self.iam.put_group_policy, GroupName=team, PolicyName=team,
                 PolicyDocument=json.dumps(policy))
-        self.op(self.iam, 'AddUserToGroup', GroupName=team,  UserName=team)
+        self.op(self.iam.add_user_to_group, GroupName=team,  UserName=team)
         return 0
-
-    def get_service(self, service_name, endpoint_name):
-        """Return a tuple containing the service and associated endpoint."""
-        service = self.aws.get_service(service_name)
-        return service, service.get_endpoint(endpoint_name)
 
     def team_to_security_group(self):
         """Return a mapping of teams to their security groups."""
-        data = self.op(self.ec2, 'DescribeSecurityGroups', debug_output=False)
+        data = self.op(self.ec2.describe_security_groups, debug_output=False)
         return {x['GroupName']: {'sg': x['GroupId']} for x in
                 data['SecurityGroups']
                 if not x['GroupName'].startswith('default')}
@@ -271,34 +276,34 @@ class AWS(object):
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
         # Remove IAM Role
-        self.op(self.iam, 'RemoveRoleFromInstanceProfile', RoleName=team,
+        self.op(self.iam.remove_role_from_instance_profile, RoleName=team,
                 InstanceProfileName=team)
-        self.op(self.iam, 'DeleteRolePolicy', RoleName=team,
+        self.op(self.iam.delete_role_policy, RoleName=team,
                 PolicyName=team)
-        self.op(self.iam, 'DeleteRole', RoleName=team)
+        self.op(self.iam.delete_role, RoleName=team)
         # Remove IAM User and Group
-        self.op(self.iam, 'DeleteLoginProfile', UserName=team)
-        self.op(self.iam, 'DeleteUserPolicy', UserName=team, PolicyName=team)
-        resp = self.op(self.iam, 'ListAccessKeys', UserName=team)
+        self.op(self.iam.delete_login_profile, UserName=team)
+        self.op(self.iam.delete_user_policy, UserName=team, PolicyName=team)
+        resp = self.op(self.iam.list_access_keys, UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
-                self.op(self.iam, 'DeleteAccessKey', UserName=team,
+                self.op(self.iam.delete_access_key, UserName=team,
                         AccessKeyId=keydata['AccessKeyId'])
         # Remove user from groups
-        for group in self.op(self.iam, 'ListGroupsForUser',
-                             UserName=team)['Groups']:
+        group_response = self.op(self.iam.list_groups_for_user, UserName=team)
+        groups = group_response['Groups'] if group_response else []
+        for group in groups:
             group_name = group['GroupName']
-            self.op(self.iam, 'RemoveUserFromGroup', GroupName=group_name,
+            self.op(self.iam.remove_user_from_group, GroupName=group_name,
                     UserName=team)
-            if not self.op(self.iam, 'GetGroup',
-                           GroupName=group_name)['Users']:
+            if not self.op(self.iam.get_group, GroupName=group_name)['Users']:
                 # Delete group
-                self.op(self.iam, 'DeleteGroupPolicy', GroupName=group_name,
+                self.op(self.iam.delete_group_policy, GroupName=group_name,
                         PolicyName=group_name)
-                self.op(self.iam, 'DeleteGroup', GroupName=group_name)
-        self.op(self.iam, 'DeleteUser', UserName=team)
-        self.op(self.ec2, 'DeleteKeyPair', KeyName=team)
-        self.op(self.ec2, 'DeleteSecurityGroup', GroupName=team)
+                self.op(self.iam.delete_group, GroupName=group_name)
+        self.op(self.iam.delete_user, UserName=team)
+        self.op(self.ec2.delete_key_pair, KeyName=team)
+        self.op(self.ec2.delete_security_group, GroupName=team)
         return 0
 
     def verify_template(self, template, upload=None):
@@ -310,16 +315,16 @@ class AWS(object):
             in S3 will be returned. Note that this URL is not publicly
             accessible, but it will work for CloudFormation Stack generation.
         """
-        cf = self.get_service('cloudformation', self.REGION)
-        valid = bool(self.op(cf, 'ValidateTemplate', TemplateBody=template,
+        cf = self.aws.create_client('cloudformation', self.REGION)
+        valid = bool(self.op(cf.validate_template, TemplateBody=template,
                              debug_output=False))
         if not valid or upload is None:
             return valid
         # Upload to s3
         bucket, key = upload
-        s3 = self.get_service('s3', None)
-        retval = self.op(s3, 'PutObject', Bucket=bucket, Key=key,
-                         Body=template, acl='public-read', debug_output=False)
+        s3 = self.aws.create_client('s3', None)
+        retval = self.op(s3.put_object, Bucket=bucket, Key=key, Body=template,
+                         acl='public-read', debug_output=False)
 
         bucketized_host = s3[1].host.replace(
             "s3.amazonaws.com", "{0}.s3.amazonaws.com".format(bucket))
@@ -1004,9 +1009,13 @@ def configure_github_team(team_name, user_names):
 
 
 def generate_password(length=16):
-    """Generate a random password containing letters and digits."""
+    """Generate password containing both cases of letters and digits."""
     ALPHA = string.ascii_letters + string.digits
-    return ''.join(random.choice(ALPHA) for _ in range(length))
+    selection = '0'
+    while selection.isalpha() or selection.isdigit() or selection.isupper()\
+            or selection.islower():
+        selection = ''.join(random.choice(ALPHA) for _ in range(length))
+    return selection
 
 
 def get_github_token():
