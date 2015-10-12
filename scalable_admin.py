@@ -324,15 +324,11 @@ class AWS(object):
         bucket, key = upload
         s3 = self.aws.create_client('s3', None)
         retval = self.op(s3.put_object, Bucket=bucket, Key=key, Body=template,
-                         acl='public-read', debug_output=False)
-
-        bucketized_host = s3[1].host.replace(
-            "s3.amazonaws.com", "{0}.s3.amazonaws.com".format(bucket))
+                         ACL='public-read', debug_output=False)
 
         if not retval:
             return retval
-        return '{host}/{key}'.format(
-            host=bucketized_host, key=key)
+        return 'https://{0}.s3.amazonaws.com/{1}'.format(bucket, key)
 
 
 class CFTemplate(object):
