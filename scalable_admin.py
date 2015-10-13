@@ -453,7 +453,7 @@ fi
 
 # Add gems needed on production
 echo -e "\ngem 'therubyracer', platforms: :ruby " >> Gemfile
-echo -e "\ngem 'mysql2', platforms: :ruby " >> Gemfile
+echo -e "\ngem 'mysql2', '~> 0.3.13', platforms: :ruby " >> Gemfile
 echo -e "\ngem 'therubyrhino', platforms: :jruby " >> Gemfile
 echo -e "\ngem 'activerecord-jdbc-adapter', platforms: :jruby " >> Gemfile
 
