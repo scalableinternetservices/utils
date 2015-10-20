@@ -48,11 +48,10 @@ class AWS(object):
 
     """This class handles AWS administrative tasks."""
 
-    EC2_INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large',
-                     'm1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+    EC2_INSTANCES = ['t1.micro', 't2.micro',
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                     'c1.medium', 'c1.xlarge', 'c3.large', 'c3.xlarge',
-                     'c3.2xlarge', 'c3.4xlarge']
+                     'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
+                     'r3.large', 'r3.xlarge', 'r3.2xlarge']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     REGION = 'us-west-2'
     ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
@@ -335,7 +334,14 @@ class CFTemplate(object):
 
     """Generate Scalable Internet Services Cloudformation templates."""
 
-    DEFAULT_AMI = 'ami-55a7ea65'
+    DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
+                                  'instance': 'ami-65116700',
+                                  'pv-ebs': 'ami-cf1066aa'},
+                    'us-west-2': {'ebs': 'ami-9ff7e8af',
+                                  'instance': 'ami-bbf7e88b',
+                                  'pv-ebs': 'ami-81f7e8b1'}}
+    DEFAULT_INSTANCE = 't1.micro'
+    DEFAULT_MULTI_INSTANCE = 'm3.medium'
     # The following strings are python-format strings, however, the values
     # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
     # escape intended brackets: '{' => '{{', '}' => '}}'
@@ -590,12 +596,22 @@ fi
 
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = self.DEFAULT_AMI
+        self.ami = None
         self.create_timeout = 'PT10M'
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
         self._team_map = None
+
+    @property
+    def ami_map(self):
+        """Return a mapping of instance type to their AMI."""
+        def ami_type(instance_type):
+            return {'t1.micro': 'pv-ebs',
+                    't2.micro': 'ebs'}.get(instance_type, 'instance')
+
+        return {x: {'ami': self.DEFAULT_AMIS[AWS.REGION][ami_type(x)]} for x in
+                AWS.EC2_INSTANCES}
 
     @property
     def team_map(self):
@@ -706,9 +722,10 @@ fi
                                             ' to launch.'),
                                maxv=8, minv=1)
             self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
-                               default='db.t1.micro',
+                               default='db.{0}'.format(
+                                   self.DEFAULT_MULTI_INSTANCE),
                                description='The Database instance type.')
-            self.template['Mappings'] = {'Teams': self.team_map}
+            self.template['Mappings']['Teams'] = self.team_map
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
@@ -751,7 +768,7 @@ fi
             if self.memcached:
                 self.add_parameter(
                     'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
-                    default='t1.micro',
+                    default=self.DEFAULT_MULTI_INSTANCE,
                     description='The memcached instance type')
                 # Memcached EC2 Instance
                 sections = ['preamble', 'postamble']
@@ -769,7 +786,8 @@ fi
                             'services': {'sysvinit': {'memcached': ENABLE}}}}},
                     'Properties': {
                         'IamInstanceProfile': self.get_ref('TeamName'),
-                        'ImageId': self.DEFAULT_AMI,
+                        'ImageId': self.get_map(
+                            'AMIs', self.DEFAULT_MULTI_INSTANCE, 'ami'),
                         'InstanceType': self.get_ref('MemcachedInstanceType'),
                         'KeyName': self.get_ref('TeamName'),
                         'SecurityGroups': [self.get_ref('TeamName')],
@@ -887,19 +905,21 @@ fi
                 'packages': {
                     'packages': {'yum': {x: [] for x in self.yum_packages}}}}},
             'Properties': {'IamInstanceProfile': self.get_ref('TeamName'),
-                           'ImageId': self.ami,
+                           'ImageId': self.ami if self.ami else self.get_map(
+                               'AMIs', self.get_ref('AppInstanceType'), 'ami'),
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
                            'SecurityGroups': [self.get_ref('TeamName')],
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
-                           default='t1.micro',
+                           default=self.DEFAULT_INSTANCE,
                            description='The AppServer instance type.')
-        self.add_parameter('TeamName', allowed=self.team_map.keys(),
-                           description='Your team name.',
-                           error_msg=('Must exactly match your team name '
-                                      'as shown in your Github URL.'))
+        self.add_parameter('TeamName', allowed=sorted(self.team_map.keys()),
+                           description='Your team name.')
+
+        self.template['Mappings'] = {'AMIs': self.ami_map}
+
         if callback:
             callback()
         template = json.dumps(self.template, indent=4,
