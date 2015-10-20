@@ -17,7 +17,8 @@ Both the app server, and database are located on a single EC2 instance.
 * __WEBrick__ (Use only for slow-performance testing):  
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
-  https://scalableinternetservices.s3.amazonaws.com/SingleWEBrick.json
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SingleWEBrick.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/SingleWEBrick.json
 
 
 ## Multiple Instance Templates
