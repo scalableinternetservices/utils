@@ -160,6 +160,8 @@ class AWS(object):
                 with open(filename, 'w') as fp:
                     fp.write('Username: {0}\n'.format(team))
                     fp.write('Password: {0}\n'.format(password))
+                filename = '{0}_key.txt'.format(team)
+                with open(filename, 'w') as fp:
                     fp.write('AccessKey: {0}\n'
                              .format(data['AccessKey']['AccessKeyId']))
                     fp.write('SecretKey: {0}\n'
