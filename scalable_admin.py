@@ -48,7 +48,7 @@ class AWS(object):
 
     """This class handles AWS administrative tasks."""
 
-    EC2_INSTANCES = ['t1.micro', 't2.micro',
+    EC2_INSTANCES = ['t2.micro',
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                      'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
                      'r3.large', 'r3.xlarge', 'r3.2xlarge']
@@ -124,9 +124,6 @@ class AWS(object):
 
         This method can be run subsequent times to apply team updates.
         """
-        # self.operation_list(self.ec2)
-        # self.operation_list(self.iam)
-
         s3_statement = [
             {'Action': '*', 'Effect': 'Allow',
              'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
@@ -178,21 +175,32 @@ class AWS(object):
         self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
                 UserName=team)
 
-        # Configure security group
-        self.op(self.ec2.create_security_group, GroupName=team,
-                Description=team)
+        # Configure security groups (one for vpc, and one for classic)
+        # * Find VPC
+        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
+        retval = self.op(self.ec2.create_security_group, GroupName=team,
+                            Description=team, VpcId=vpc['VpcId'])
+        if retval:
+            group_id = retval['GroupId']
+        else:
+            group_id = self.op(
+                self.ec2.describe_security_groups,
+                Filters=[{'Name': 'group-name', 'Values': [team]}]
+            )['SecurityGroups'][0]['GroupId']
+
         for port in [22, 80, 443]:  # Open standard ports to all addresses.
             # These are run one at a time so that existance of one doesn't
             # prevent the creation of the others.
             rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
             self.op(self.ec2.authorize_security_group_ingress,
-                    GroupName=team, IpPermissions=[rule])
+                    GroupId=group_id, IpPermissions=[rule])
+
         # Permit all instances in the SecurityGroup to talk to each other
-        self.op(self.ec2.authorize_security_group_ingress, GroupName=team,
+        self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
                 IpPermissions=[
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
-                     'UserIdGroupPairs': [{'GroupName': team}]}])
+                     'UserIdGroupPairs': [{'GroupId': group_id}]}])
 
         policy = {'Statement': []}
         # State-based policies
@@ -335,12 +343,10 @@ class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
 
     DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
-                                  'instance': 'ami-65116700',
-                                  'pv-ebs': 'ami-cf1066aa'},
+                                  'instance': 'ami-65116700'},
                     'us-west-2': {'ebs': 'ami-9ff7e8af',
-                                  'instance': 'ami-bbf7e88b',
-                                  'pv-ebs': 'ami-81f7e8b1'}}
-    DEFAULT_INSTANCE = 't1.micro'
+                                  'instance': 'ami-bbf7e88b'}}
+    DEFAULT_INSTANCE = 't2.micro'
     DEFAULT_MULTI_INSTANCE = 'm3.medium'
     # The following strings are python-format strings, however, the values
     # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
@@ -607,8 +613,7 @@ fi
     def ami_map(self):
         """Return a mapping of instance type to their AMI."""
         def ami_type(instance_type):
-            return {'t1.micro': 'pv-ebs',
-                    't2.micro': 'ebs'}.get(instance_type, 'instance')
+            return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
         return {x: {'ami': self.DEFAULT_AMIS[AWS.REGION][ami_type(x)]} for x in
                 AWS.EC2_INSTANCES}
@@ -692,7 +697,7 @@ fi
         self.add_output('SSH', '{0} SSH connect string'.format(resource_name),
                         self.join(
             'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att(resource_name, 'PublicDnsName')))
+            self.get_att(resource_name, 'PublicIp')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
@@ -725,7 +730,6 @@ fi
                                default='db.{0}'.format(
                                    self.DEFAULT_MULTI_INSTANCE),
                                description='The Database instance type.')
-            self.template['Mappings']['Teams'] = self.team_map
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
@@ -909,7 +913,9 @@ fi
                                'AMIs', self.get_ref('AppInstanceType'), 'ami'),
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
-                           'SecurityGroups': [self.get_ref('TeamName')],
+                           'SecurityGroupIds': [self.get_map(
+                               'Teams', self.get_ref('TeamName'), 'sg')],
+                           'SubnetId': 'subnet-614e975c',
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
@@ -918,7 +924,8 @@ fi
         self.add_parameter('TeamName', allowed=sorted(self.team_map.keys()),
                            description='Your team name.')
 
-        self.template['Mappings'] = {'AMIs': self.ami_map}
+        self.template['Mappings'] = {'AMIs': self.ami_map,
+                                     'Teams': self.team_map}
 
         if callback:
             callback()
