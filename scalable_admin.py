@@ -430,7 +430,7 @@ ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
- :dalli_store, "{Memcached,PublicDnsName}"/' config/environments/production.rb
+ :dalli_store, "{Memcached,PublicIp}"/' config/environments/production.rb
 """,
             'memcached_configure_single': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
@@ -801,7 +801,7 @@ fi
                     'Type': 'AWS::EC2::Instance'}
                 self.add_ssh_output('Memcached')
         else:
-            url = self.get_att('AppServer', 'PublicDnsName')
+            url = self.get_att('AppServer', 'PublicIp')
             self.add_ssh_output()
         self.add_output('URL', 'The URL to the rails application.',
                         self.join('http://', url))
@@ -917,7 +917,7 @@ fi
                            'KeyName': self.get_ref('TeamName'),
                            'SecurityGroupIds': [self.get_map(
                                'Teams', self.get_ref('TeamName'), 'sg')],
-                           'SubnetId': 'subnet-614e975c',
+                           'SubnetId': 'subnet-614e975c',  # TODO: Make dynamic
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
