@@ -34,14 +34,8 @@ import sys
 
 __version__ = '0.1'
 
-
-# Update this value for your github organization.
-GH_ORGANIZATION = 'scalableinternetservices'
-
-# Update this value for your class's S3 bucket.
-# Cloudformation templates are stored in this bucket, and each TEAM will have
-# PUT/GET permissions to `S3_BUCKET/TEAMNAME/`
-S3_BUCKET = 'scalableinternetservices'
+# The following globals are set in `parse_config`
+GH_ORGANIZATION = S3_BUCKET = None
 
 
 class AWS(object):
@@ -51,33 +45,8 @@ class AWS(object):
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                      'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
                      'r3.large', 'r3.xlarge', 'r3.2xlarge']
-    RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
-    REGION = 'us-west-2'
-    ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
-    ARNEC2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(REGION)
-    ARNELB = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
-              .format(REGION))
-    ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
-    ARNRDSSUB = 'arn:aws:rds:{0}:*:subgrp:{{0}}'.format(REGION)
-    POLICY = {'Statement':
-              [{'Action': ['autoscaling:*',  # No fine grained permissions
-                           'cloudformation:CreateUploadBucket',
-                           'cloudformation:Describe*',
-                           'cloudformation:Get*',
-                           'cloudformation:ListStack*',
-                           'cloudformation:ValidateTemplate',
-                           'cloudwatch:DescribeAlarms',
-                           'cloudwatch:GetMetricStatistics',
-                           'elasticloadbalancing:Describe*', 'rds:Describe*',
-                           'iam:ListServerCertificates',
-                           'rds:ListTagsForResource',
-                           'sts:DecodeAuthorizationMessage'],
-                'Effect': 'Allow', 'Resource': '*'},
-               {'Action': ['ec2:Describe*'],
-                'Condition': {'StringEquals': {'ec2:Region': REGION}},
-                'Effect': 'Allow', 'Resource': '*'},
-               {'Action': ['s3:Get*', 's3:Put*'], 'Effect': 'Allow',
-                'Resource': 'arn:aws:s3:::cf-templates*{0}*'.format(REGION)}]}
+    RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES
+                     if x != 't2.micro']
     GROUP = 'scalableinternetservices'
     PROFILE = 'admin'
 
@@ -103,12 +72,45 @@ class AWS(object):
         pprint(service_name[0].operations)
         sys.exit(1)
 
+    @classmethod
+    def set_class_variables(cls, region):
+        """Set class-based variables that depend on the passed in region."""
+        cls.region = 'us-east-1'
+        cls.arncf = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(cls.region)
+        cls.arnec2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(cls.region)
+        cls.arnelb = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
+                      .format(cls.region))
+        cls.arnrds = 'arn:aws:rds:{0}:*:db:{{0}}'.format(cls.region)
+        cls.arnrdssub = 'arn:aws:rds:{0}:*:subgrp:{{0}}'.format(cls.region)
+        cls.policy = {
+            'Statement':
+            [{'Action': ['autoscaling:*',  # No fine grained permissions
+                         'cloudformation:CreateUploadBucket',
+                         'cloudformation:Describe*',
+                         'cloudformation:Get*',
+                         'cloudformation:ListStack*',
+                         'cloudformation:ValidateTemplate',
+                         'cloudwatch:DescribeAlarms',
+                         'cloudwatch:GetMetricStatistics',
+                         'elasticloadbalancing:Describe*',
+                         'iam:ListServerCertificates',
+                         'rds:Describe*',
+                         'rds:ListTagsForResource',
+                         'sts:DecodeAuthorizationMessage'],
+              'Effect': 'Allow', 'Resource': '*'},
+             {'Action': ['ec2:Describe*'],
+              'Condition': {'StringEquals': {'ec2:Region': cls.region}},
+              'Effect': 'Allow', 'Resource': '*'},
+             {'Action': ['s3:Get*', 's3:Put*'], 'Effect': 'Allow',
+              'Resource': ('arn:aws:s3:::cf-templates*{0}*'
+                           .format(cls.region))}]}
+
     def __init__(self):
         """Initialize the AWS class."""
         self.aws = botocore.session.Session(profile=self.PROFILE)
-        self.ec2 = self.aws.create_client('ec2', self.REGION)
+        self.ec2 = self.aws.create_client('ec2', self.region)
         self.iam = self.aws.create_client('iam', None)
-        self.rds = self.aws.create_client('rds', self.REGION)
+        self.rds = self.aws.create_client('rds', self.region)
 
     def az_to_subnet(self):
         """Return a mapping of availability zone to their subnet."""
@@ -120,7 +122,7 @@ class AWS(object):
 
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
-        cf = self.aws.create_client('cloudformation', self.REGION)
+        cf = self.aws.create_client('cloudformation', self.region)
         now = datetime.now(UTC())
         for stack in self.op(cf.list_stacks, False)['StackSummaries']:
             if stack['StackStatus'] in {'DELETE_COMPLETE'}:
@@ -156,7 +158,7 @@ class AWS(object):
         # Create IAM group if it does not exist
         self.op(self.iam.create_group, GroupName=self.GROUP)
         self.op(self.iam.put_group_policy, GroupName=self.GROUP,
-                PolicyName=self.GROUP, PolicyDocument=json.dumps(self.POLICY))
+                PolicyName=self.GROUP, PolicyDocument=json.dumps(self.policy))
 
         # Configure user account / password / access keys / keypair
         if self.op(self.iam.create_user, UserName=team):
@@ -224,7 +226,7 @@ class AWS(object):
                         'cloudformation:DeleteStack',
                         'cloudformation:UpdateStack'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNCF.format('stack/{0}*'.format(team))})
+             'Resource': AWS.arncf.format('stack/{0}*'.format(team))})
         policy['Statement'].append(
             {'Action': ['ec2:RebootInstances', 'ec2:StartInstances',
                         'ec2:StopInstances', 'ec2:TerminateInstances'],
@@ -232,25 +234,25 @@ class AWS(object):
                  'StringLike': {
                      'ec2:ResourceTag/aws:cloudformation:stack-name':
                      '{0}*'.format(team)}},
-             'Effect': 'Allow', 'Resource': AWS.ARNEC2.format('instance/*')})
+             'Effect': 'Allow', 'Resource': AWS.arnec2.format('instance/*')})
         policy['Statement'].append(
             {'Action': 'elasticloadbalancing:*',
              'Effect': 'Allow',
-             'Resource': AWS.ARNELB.format('{0}*'.format(team))})
+             'Resource': AWS.arnelb.format('{0}*'.format(team))})
         policy['Statement'].append(
             {'Action': ['rds:DeleteDBInstance', 'rds:RebootDBInstance'],
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
+             'Resource': AWS.arnrds.format('{0}*'.format(team).lower())})
         # Creation policies
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Effect': 'Allow',
-             'Resource': [AWS.ARNEC2.format('image/*'),
-                          AWS.ARNEC2.format('key-pair/{0}'.format(team)),
-                          AWS.ARNEC2.format('network-interface/*'),
-                          AWS.ARNEC2.format('security-group/*'),
-                          AWS.ARNEC2.format('subnet/*'),
-                          AWS.ARNEC2.format('volume/*')]})
+             'Resource': [AWS.arnec2.format('image/*'),
+                          AWS.arnec2.format('key-pair/{0}'.format(team)),
+                          AWS.arnec2.format('network-interface/*'),
+                          AWS.arnec2.format('security-group/*'),
+                          AWS.arnec2.format('subnet/*'),
+                          AWS.arnec2.format('volume/*')]})
         # Allow teams to add their own SSL certificate
         policy['Statement'].append(
             {'Action': 'iam:UploadServerCertificate',
@@ -269,7 +271,7 @@ class AWS(object):
              'Condition': {
                  'StringLike': {'ec2:InstanceType': self.EC2_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': AWS.ARNEC2.format('instance/*')})
+             'Resource': AWS.arnec2.format('instance/*')})
         # Filter the RDS instance types that are allowed to be started
         policy['Statement'].append(
             {'Action': ['rds:CreateDBInstance', 'rds:ModifyDBInstance'],
@@ -279,8 +281,8 @@ class AWS(object):
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': [AWS.ARNRDS.format('{0}*'.format(team).lower()),
-                          AWS.ARNRDSSUB.format('{0}'.format(team).lower())]})
+             'Resource': [AWS.arnrds.format('{0}*'.format(team).lower()),
+                          AWS.arnrdssub.format('{0}'.format(team).lower())]})
 
         # Create and associate TEAM group (can have longer policy lists)
         self.op(self.iam.create_group, GroupName=team)
@@ -330,6 +332,7 @@ class AWS(object):
             self.ec2.describe_security_groups,
             Filters=[{'Name': 'group-name', 'Values': [team]}]
         )['SecurityGroups'][0]['GroupId']
+        self.op(self.iam.delete_instance_profile, InstanceProfileName=team)
         self.op(self.ec2.delete_security_group, GroupId=group_id)
         self.op(self.rds.delete_db_subnet_group, DBSubnetGroupName=team)
         return 0
@@ -343,7 +346,7 @@ class AWS(object):
             in S3 will be returned. Note that this URL is not publicly
             accessible, but it will work for CloudFormation Stack generation.
         """
-        cf = self.aws.create_client('cloudformation', self.REGION)
+        cf = self.aws.create_client('cloudformation', self.region)
         valid = bool(self.op(cf.validate_template, TemplateBody=template,
                              debug_output=False))
         if not valid or upload is None:
@@ -618,7 +621,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         def ami_type(instance_type):
             return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
-        return {x: {'ami': self.DEFAULT_AMIS[AWS.REGION][ami_type(x)]} for x in
+        return {x: {'ami': self.DEFAULT_AMIS[AWS.region][ami_type(x)]} for x in
                 AWS.EC2_INSTANCES}
 
     @property
@@ -1052,6 +1055,31 @@ def generate_password(length=16):
     return selection
 
 
+def parse_config():
+    """Parse the configuation file and set the necessary state."""
+    global GH_ORGANIZATION, S3_BUCKET
+    config_path = os.path.expanduser('~/.config/scalable_admin.json')
+    if not os.path.isfile(config_path):
+        sys.stderr.write('{0} does not exist.\n'.format(config_path))
+        sys.exit(1)
+
+    with open(config_path) as fp:
+        config = json.load(fp)
+
+    error = False
+    for key in ['aws_region', 'github_organization', 's3_bucket']:
+        if key not in config:
+            sys.stderr.write('The key {0} does not exist in {1}\n'.format(
+                key, config_path))
+            error = True
+    if error:
+        sys.exit(1)
+
+    AWS.set_class_variables(config['aws_region'])
+    GH_ORGANIZATION = config['github_organization']
+    S3_BUCKET = config['s3_bucket']
+
+
 def get_github_token():
     """Fetch and/or load API authorization token for Github."""
     credential_file = os.path.expanduser('~/.config/scalable_github_creds')
@@ -1115,6 +1143,8 @@ def github_authenticate_and_fetch_org():
 def main():
     """Enter admin.py."""
     args = docopt(__doc__)
+
+    parse_config()
 
     # Replace spaces with hyphens in team names
     if args['TEAM']:
