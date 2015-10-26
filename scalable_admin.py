@@ -3,16 +3,16 @@
 """Scalable Internet Services administrative utility.
 
 Usage:
-  admin aws TEAM...
-  admin aws-cleanup
-  admin aws-purge TEAM...
-  admin aws-update-all
-  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--puma] [--memcached]
-  admin cftemplate tsung [--no-test] [--app-ami=ami]
-  admin cftemplate passenger-ami
-  admin cftemplate tsung-ami
-  admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
-  admin gh TEAM USER...
+  scalable_admin aws TEAM...
+  scalable_admin aws-cleanup
+  scalable_admin aws-purge TEAM...
+  scalable_admin aws-update-all
+  scalable_admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--puma] [--memcached]
+  scalable_admin cftemplate tsung [--no-test] [--app-ami=ami]
+  scalable_admin cftemplate passenger-ami
+  scalable_admin cftemplate tsung-ami
+  scalable_admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
+  scalable_admin gh TEAM USER...
 
 -h --help  show this message
 """  # NOQA
