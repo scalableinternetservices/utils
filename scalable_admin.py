@@ -609,11 +609,19 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 AWS.EC2_INSTANCES}
 
     @property
+    def default_subnet(self):
+        return sorted(self.subnets)[0]
+
+    @property
     def subnet_map(self):
         """Return a mapping of AZ to subnet."""
         if self._subnet_map is None:
             self._subnet_map = AWS().az_to_subnet()
         return self._subnet_map
+
+    @property
+    def subnets(self):
+        return [x['subnet'] for x in self.subnet_map.values()]
 
     @property
     def team_map(self):
@@ -746,6 +754,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'DBInstanceClass': self.get_ref('DBInstanceType'),
                     'DBInstanceIdentifier': self.get_ref('AWS::StackName'),
                     'DBName': 'rails_app',
+                    'DBSubnetGroupName': 'SubnetGroup',
                     'Engine': 'mysql',
                     'MasterUsername': 'root',
                     'MasterUserPassword': 'password',
@@ -766,6 +775,11 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'SecurityGroups': [self.get_map(
                         'Teams', self.get_ref('TeamName'), 'sg')]},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
+            self.template['Resources']['SubnetGroup'] = {
+                'Properties': {
+                    'DBSubnetGroupDescription': 'SubnetGroup',
+                    'SubnetIds': self.subnets},
+                'Type': 'AWS::RDS::DBSubnetGroup'}
             if self.memcached:
                 self.add_parameter(
                     'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
@@ -900,7 +914,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                            'KeyName': self.get_ref('TeamName'),
                            'SecurityGroupIds': [self.get_map(
                                'Teams', self.get_ref('TeamName'), 'sg')],
-                           'SubnetId': self.subnet_map.values()[0]['subnet'],
+                           'SubnetId': self.default_subnet,
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
