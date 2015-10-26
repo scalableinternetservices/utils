@@ -477,6 +477,7 @@ echo -e "\ngem 'therubyracer', platforms: :ruby " >> Gemfile
 echo -e "\ngem 'mysql2', '~> 0.3.13', platforms: :ruby " >> Gemfile
 echo -e "\ngem 'therubyrhino', platforms: :jruby " >> Gemfile
 echo -e "\ngem 'activerecord-jdbc-adapter', platforms: :jruby " >> Gemfile
+echo -e "\ngem 'multi_json'" >> Gemfile
 
 # Run the remaining commands as the ec2-user in the app directory
 user_sudo bundle install --without test development\
@@ -500,9 +501,6 @@ if [ -f .rails_initialize ]; then
     sudo -u ec2-user bash -l .rails_initialize\
      || error_exit 'Failed to run .rails_initialize'
 fi
-# Fix multi_json gem version (>1.7.8 has issues precompiling assets)
-echo -e "\ngem 'multi_json', '1.7.8'" >> Gemfile
-user_sudo bundle update multi_json || error_exit 'Failed to update multi_json'
 # Generate static assets
 user_sudo rake assets:precompile\
  || error_exit 'Failed to precompile static assets'
