@@ -211,7 +211,6 @@ class AWS(object):
         self.op(self.rds.create_db_subnet_group, DBSubnetGroupDescription=team,
                 DBSubnetGroupName=team, SubnetIds=subnets)
 
-
         # Permit all instances in the SecurityGroup to talk to each other
         self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
                 IpPermissions=[
@@ -624,6 +623,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
 
     @property
     def default_subnet(self):
+        """Return the first subnet for the VPC."""
         return sorted(self.subnets)[0]
 
     @property
@@ -635,6 +635,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
 
     @property
     def subnets(self):
+        """Return a list of VPC subnets."""
         return [x['subnet'] for x in self.subnet_map.values()]
 
     @property
@@ -683,10 +684,15 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             'configSets': {'default': ['packages', 'app', 'perms', 'user']},
             'app': app, 'perms': perms, 'user': user})
         if self.multi:
+            conf['Properties']['SecurityGroups'] = [self.get_map(
+                'Teams', self.get_ref('TeamName'), 'sg')]
             conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
             conf['CreationPolicy'] = {
                 'ResourceSignal': {'Timeout': self.create_timeout}}
+            conf['Properties']['SecurityGroupIds'] = [self.get_map(
+                'Teams', self.get_ref('TeamName'), 'sg')]
+            conf['Properties']['SubnetId'] = self.default_subnet
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -754,12 +760,12 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'Count': self.get_ref('AppInstances'),
                     'Timeout': self.create_timeout}},
                 'Properties': {
-                    'AvailabilityZones': {'Fn::GetAZs': ''},
                     'LaunchConfigurationName':
                     self.get_ref('AppServer'),
                     'LoadBalancerNames': [self.get_ref('LoadBalancer')],
                     'MaxSize': self.get_ref('AppInstances'),
-                    'MinSize': self.get_ref('AppInstances')},
+                    'MinSize': self.get_ref('AppInstances'),
+                    'VPCZoneIdentifier': self.subnets},
                 'Type': 'AWS::AutoScaling::AutoScalingGroup'}
             self.template['Resources']['Database'] = {
                 'Properties': {
@@ -921,9 +927,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                                'AMIs', self.get_ref('AppInstanceType'), 'ami'),
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
-                           'SecurityGroupIds': [self.get_map(
-                               'Teams', self.get_ref('TeamName'), 'sg')],
-                           'SubnetId': self.default_subnet,
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
