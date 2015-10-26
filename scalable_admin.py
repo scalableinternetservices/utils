@@ -58,6 +58,7 @@ class AWS(object):
     ARNELB = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
               .format(REGION))
     ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
+    ARNRDSSUB = 'arn:aws:rds:{0}:*:subgrp:{{0}}'.format(REGION)
     POLICY = {'Statement':
               [{'Action': ['autoscaling:*',  # No fine grained permissions
                            'cloudformation:CreateUploadBucket',
@@ -107,6 +108,7 @@ class AWS(object):
         self.aws = botocore.session.Session(profile=self.PROFILE)
         self.ec2 = self.aws.create_client('ec2', self.REGION)
         self.iam = self.aws.create_client('iam', None)
+        self.rds = self.aws.create_client('rds', self.REGION)
 
     def az_to_subnet(self):
         """Return a mapping of availability zone to their subnet."""
@@ -204,6 +206,11 @@ class AWS(object):
             self.op(self.ec2.authorize_security_group_ingress,
                     GroupId=group_id, IpPermissions=[rule])
 
+        # Create RDS Subgroups
+        subnets = [x['subnet'] for x in self.az_to_subnet().values()]
+        self.op(self.rds.create_db_subnet_group, DBSubnetGroupDescription=team,
+                DBSubnetGroupName=team, SubnetIds=subnets)
+
         # Permit all instances in the SecurityGroup to talk to each other
         self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
                 IpPermissions=[
@@ -272,7 +279,8 @@ class AWS(object):
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
+             'Resource': [AWS.ARNRDS.format('{0}*'.format(team).lower()),
+                          AWS.ARNRDSSUB.format('{0}'.format(team).lower())]})
 
         # Create and associate TEAM group (can have longer policy lists)
         self.op(self.iam.create_group, GroupName=team)
@@ -298,7 +306,6 @@ class AWS(object):
         self.op(self.iam.delete_role, RoleName=team)
         # Remove IAM User and Group
         self.op(self.iam.delete_login_profile, UserName=team)
-        self.op(self.iam.delete_user_policy, UserName=team, PolicyName=team)
         resp = self.op(self.iam.list_access_keys, UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
@@ -318,7 +325,13 @@ class AWS(object):
                 self.op(self.iam.delete_group, GroupName=group_name)
         self.op(self.iam.delete_user, UserName=team)
         self.op(self.ec2.delete_key_pair, KeyName=team)
-        self.op(self.ec2.delete_security_group, GroupName=team)
+
+        group_id = self.op(
+            self.ec2.describe_security_groups,
+            Filters=[{'Name': 'group-name', 'Values': [team]}]
+        )['SecurityGroups'][0]['GroupId']
+        self.op(self.ec2.delete_security_group, GroupId=group_id)
+        self.op(self.rds.delete_db_subnet_group, DBSubnetGroupName=team)
         return 0
 
     def verify_template(self, template, upload=None):
@@ -609,11 +622,21 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 AWS.EC2_INSTANCES}
 
     @property
+    def default_subnet(self):
+        """Return the first subnet for the VPC."""
+        return sorted(self.subnets)[0]
+
+    @property
     def subnet_map(self):
         """Return a mapping of AZ to subnet."""
         if self._subnet_map is None:
             self._subnet_map = AWS().az_to_subnet()
         return self._subnet_map
+
+    @property
+    def subnets(self):
+        """Return a list of VPC subnets."""
+        return [x['subnet'] for x in self.subnet_map.values()]
 
     @property
     def team_map(self):
@@ -661,10 +684,15 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             'configSets': {'default': ['packages', 'app', 'perms', 'user']},
             'app': app, 'perms': perms, 'user': user})
         if self.multi:
+            conf['Properties']['SecurityGroups'] = [self.get_map(
+                'Teams', self.get_ref('TeamName'), 'sg')]
             conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
             conf['CreationPolicy'] = {
                 'ResourceSignal': {'Timeout': self.create_timeout}}
+            conf['Properties']['SecurityGroupIds'] = [self.get_map(
+                'Teams', self.get_ref('TeamName'), 'sg')]
+            conf['Properties']['SubnetId'] = self.default_subnet
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -732,12 +760,12 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'Count': self.get_ref('AppInstances'),
                     'Timeout': self.create_timeout}},
                 'Properties': {
-                    'AvailabilityZones': {'Fn::GetAZs': ''},
                     'LaunchConfigurationName':
                     self.get_ref('AppServer'),
                     'LoadBalancerNames': [self.get_ref('LoadBalancer')],
                     'MaxSize': self.get_ref('AppInstances'),
-                    'MinSize': self.get_ref('AppInstances')},
+                    'MinSize': self.get_ref('AppInstances'),
+                    'VPCZoneIdentifier': self.subnets},
                 'Type': 'AWS::AutoScaling::AutoScalingGroup'}
             self.template['Resources']['Database'] = {
                 'Properties': {
@@ -746,6 +774,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'DBInstanceClass': self.get_ref('DBInstanceType'),
                     'DBInstanceIdentifier': self.get_ref('AWS::StackName'),
                     'DBName': 'rails_app',
+                    'DBSubnetGroupName': self.get_ref('TeamName'),
                     'Engine': 'mysql',
                     'MasterUsername': 'root',
                     'MasterUserPassword': 'password',
@@ -754,7 +783,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 'Type': 'AWS::RDS::DBInstance'}
             self.template['Resources']['LoadBalancer'] = {
                 'Properties': {
-                    'AvailabilityZones': {'Fn::GetAZs': ''},
                     'LBCookieStickinessPolicy': [
                         {'PolicyName': 'CookiePolicy',
                          'CookieExpirationPeriod': 30}],
@@ -764,7 +792,8 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}],
                     'SecurityGroups': [self.get_map(
-                        'Teams', self.get_ref('TeamName'), 'sg')]},
+                        'Teams', self.get_ref('TeamName'), 'sg')],
+                    'Subnets': self.subnets},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
             if self.memcached:
                 self.add_parameter(
@@ -898,9 +927,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                                'AMIs', self.get_ref('AppInstanceType'), 'ami'),
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
-                           'SecurityGroupIds': [self.get_map(
-                               'Teams', self.get_ref('TeamName'), 'sg')],
-                           'SubnetId': self.subnet_map.values()[0]['subnet'],
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
