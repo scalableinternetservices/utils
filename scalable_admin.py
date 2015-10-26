@@ -58,6 +58,7 @@ class AWS(object):
     ARNELB = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
               .format(REGION))
     ARNRDS = 'arn:aws:rds:{0}:*:db:{{0}}'.format(REGION)
+    ARNRDSSUB = 'arn:aws:rds:{0}:*:subgrp:{{0}}'.format(REGION)
     POLICY = {'Statement':
               [{'Action': ['autoscaling:*',  # No fine grained permissions
                            'cloudformation:CreateUploadBucket',
@@ -107,6 +108,7 @@ class AWS(object):
         self.aws = botocore.session.Session(profile=self.PROFILE)
         self.ec2 = self.aws.create_client('ec2', self.REGION)
         self.iam = self.aws.create_client('iam', None)
+        self.rds = self.aws.create_client('rds', self.REGION)
 
     def az_to_subnet(self):
         """Return a mapping of availability zone to their subnet."""
@@ -204,6 +206,12 @@ class AWS(object):
             self.op(self.ec2.authorize_security_group_ingress,
                     GroupId=group_id, IpPermissions=[rule])
 
+        # Create RDS Subgroups
+        subnets = [x['subnet'] for x in self.az_to_subnet().values()]
+        self.op(self.rds.create_db_subnet_group, DBSubnetGroupDescription=team,
+                DBSubnetGroupName=team, SubnetIds=subnets)
+
+
         # Permit all instances in the SecurityGroup to talk to each other
         self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
                 IpPermissions=[
@@ -272,7 +280,8 @@ class AWS(object):
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
                  'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
              'Effect': 'Allow',
-             'Resource': AWS.ARNRDS.format('{0}*'.format(team).lower())})
+             'Resource': [AWS.ARNRDS.format('{0}*'.format(team).lower()),
+                          AWS.ARNRDSSUB.format('{0}'.format(team).lower())]})
 
         # Create and associate TEAM group (can have longer policy lists)
         self.op(self.iam.create_group, GroupName=team)
@@ -298,7 +307,6 @@ class AWS(object):
         self.op(self.iam.delete_role, RoleName=team)
         # Remove IAM User and Group
         self.op(self.iam.delete_login_profile, UserName=team)
-        self.op(self.iam.delete_user_policy, UserName=team, PolicyName=team)
         resp = self.op(self.iam.list_access_keys, UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
@@ -318,7 +326,13 @@ class AWS(object):
                 self.op(self.iam.delete_group, GroupName=group_name)
         self.op(self.iam.delete_user, UserName=team)
         self.op(self.ec2.delete_key_pair, KeyName=team)
-        self.op(self.ec2.delete_security_group, GroupName=team)
+
+        group_id = self.op(
+            self.ec2.describe_security_groups,
+            Filters=[{'Name': 'group-name', 'Values': [team]}]
+        )['SecurityGroups'][0]['GroupId']
+        self.op(self.ec2.delete_security_group, GroupId=group_id)
+        self.op(self.rds.delete_db_subnet_group, DBSubnetGroupName=team)
         return 0
 
     def verify_template(self, template, upload=None):
@@ -754,7 +768,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'DBInstanceClass': self.get_ref('DBInstanceType'),
                     'DBInstanceIdentifier': self.get_ref('AWS::StackName'),
                     'DBName': 'rails_app',
-                    'DBSubnetGroupName': 'SubnetGroup',
+                    'DBSubnetGroupName': self.get_ref('TeamName'),
                     'Engine': 'mysql',
                     'MasterUsername': 'root',
                     'MasterUserPassword': 'password',
@@ -763,7 +777,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 'Type': 'AWS::RDS::DBInstance'}
             self.template['Resources']['LoadBalancer'] = {
                 'Properties': {
-                    'AvailabilityZones': {'Fn::GetAZs': ''},
                     'LBCookieStickinessPolicy': [
                         {'PolicyName': 'CookiePolicy',
                          'CookieExpirationPeriod': 30}],
@@ -773,13 +786,9 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                                    'PolicyNames': ['CookiePolicy'],
                                    'Protocol': 'http'}],
                     'SecurityGroups': [self.get_map(
-                        'Teams', self.get_ref('TeamName'), 'sg')]},
+                        'Teams', self.get_ref('TeamName'), 'sg')],
+                    'Subnets': self.subnets},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
-            self.template['Resources']['SubnetGroup'] = {
-                'Properties': {
-                    'DBSubnetGroupDescription': 'SubnetGroup',
-                    'SubnetIds': self.subnets},
-                'Type': 'AWS::RDS::DBSubnetGroup'}
             if self.memcached:
                 self.add_parameter(
                     'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
