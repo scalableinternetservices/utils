@@ -48,11 +48,10 @@ class AWS(object):
 
     """This class handles AWS administrative tasks."""
 
-    EC2_INSTANCES = ['t1.micro', 'm1.small', 'm1.medium', 'm1.large',
-                     'm1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+    EC2_INSTANCES = ['t2.micro',
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                     'c1.medium', 'c1.xlarge', 'c3.large', 'c3.xlarge',
-                     'c3.2xlarge', 'c3.4xlarge']
+                     'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
+                     'r3.large', 'r3.xlarge', 'r3.2xlarge']
     RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES]
     REGION = 'us-west-2'
     ARNCF = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(REGION)
@@ -110,6 +109,14 @@ class AWS(object):
         self.ec2 = self.aws.create_client('ec2', self.REGION)
         self.iam = self.aws.create_client('iam', None)
 
+    def az_to_subnet(self):
+        """Return a mapping of availability zone to their subnet."""
+        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
+        subnets = self.op(self.ec2.describe_subnets, Filters=[
+            {'Name': 'vpc-id', 'Values': [vpc['VpcId']]}])['Subnets']
+        return {x['AvailabilityZone']: {'subnet': x['SubnetId']}
+                for x in subnets}
+
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
         cf = self.aws.create_client('cloudformation', self.REGION)
@@ -125,9 +132,6 @@ class AWS(object):
 
         This method can be run subsequent times to apply team updates.
         """
-        # self.operation_list(self.ec2)
-        # self.operation_list(self.iam)
-
         s3_statement = [
             {'Action': '*', 'Effect': 'Allow',
              'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
@@ -164,6 +168,8 @@ class AWS(object):
                 with open(filename, 'w') as fp:
                     fp.write('Username: {0}\n'.format(team))
                     fp.write('Password: {0}\n'.format(password))
+                filename = '{0}_key.txt'.format(team)
+                with open(filename, 'w') as fp:
                     fp.write('AccessKey: {0}\n'
                              .format(data['AccessKey']['AccessKeyId']))
                     fp.write('SecretKey: {0}\n'
@@ -179,21 +185,31 @@ class AWS(object):
         self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
                 UserName=team)
 
-        # Configure security group
-        self.op(self.ec2.create_security_group, GroupName=team,
-                Description=team)
+        # Configure security groups
+        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
+        retval = self.op(self.ec2.create_security_group, GroupName=team,
+                            Description=team, VpcId=vpc['VpcId'])
+        if retval:
+            group_id = retval['GroupId']
+        else:
+            group_id = self.op(
+                self.ec2.describe_security_groups,
+                Filters=[{'Name': 'group-name', 'Values': [team]}]
+            )['SecurityGroups'][0]['GroupId']
+
         for port in [22, 80, 443]:  # Open standard ports to all addresses.
             # These are run one at a time so that existance of one doesn't
             # prevent the creation of the others.
             rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
             self.op(self.ec2.authorize_security_group_ingress,
-                    GroupName=team, IpPermissions=[rule])
+                    GroupId=group_id, IpPermissions=[rule])
+
         # Permit all instances in the SecurityGroup to talk to each other
-        self.op(self.ec2.authorize_security_group_ingress, GroupName=team,
+        self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
                 IpPermissions=[
                     {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
-                     'UserIdGroupPairs': [{'GroupName': team}]}])
+                     'UserIdGroupPairs': [{'GroupId': group_id}]}])
 
         policy = {'Statement': []}
         # State-based policies
@@ -335,7 +351,12 @@ class CFTemplate(object):
 
     """Generate Scalable Internet Services Cloudformation templates."""
 
-    DEFAULT_AMI = 'ami-55a7ea65'
+    DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
+                                  'instance': 'ami-65116700'},
+                    'us-west-2': {'ebs': 'ami-9ff7e8af',
+                                  'instance': 'ami-bbf7e88b'}}
+    DEFAULT_INSTANCE = 't2.micro'
+    DEFAULT_MULTI_INSTANCE = 'm3.medium'
     # The following strings are python-format strings, however, the values
     # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
     # escape intended brackets: '{' => '{{', '}' => '}}'
@@ -416,7 +437,7 @@ ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
 """,
             'memcached_configure_multi': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
- :dalli_store, "{Memcached,PublicDnsName}"/' config/environments/production.rb
+ :dalli_store, "{Memcached,PublicIp}"/' config/environments/production.rb
 """,
             'memcached_configure_single': """# Configure rails to use dalli
 sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
@@ -518,20 +539,9 @@ user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma\
 """,
             'passenger-install': """# Install Passenger
 gem install passenger rake || error_exit 'Failed to install passenger gems'
-# Add swap space needed to build passenger if running on t1.micro
-if [ "{AppInstanceType}" == "t1.micro" ]; then
-  dd if=/dev/zero of=/swap bs=1M count=512\
-   || error_exit 'Failed to create swap file'
-  mkswap /swap || error_exit 'Failed to mkswap'
-  swapon /swap || error_exit 'Failed to enable swap'
-fi
 # Build and install passenger
 user_sudo /usr/local/bin/passenger start --runtime-check-only\
  || error_exit 'Failed to build or install passenger'
-if [ "{AppInstanceType}" == "t1.micro" ]; then
-  swapoff /swap || error_exit 'Failed to disable swap'
-  rm /swap || error_exit 'Failed to delete /swap'
-fi
 """,
             'postamble': """# All is well so signal success
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
@@ -590,12 +600,29 @@ fi
 
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = self.DEFAULT_AMI
+        self.ami = None
         self.create_timeout = 'PT10M'
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
+        self._subnet_map = None
         self._team_map = None
+
+    @property
+    def ami_map(self):
+        """Return a mapping of instance type to their AMI."""
+        def ami_type(instance_type):
+            return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
+
+        return {x: {'ami': self.DEFAULT_AMIS[AWS.REGION][ami_type(x)]} for x in
+                AWS.EC2_INSTANCES}
+
+    @property
+    def subnet_map(self):
+        """Return a mapping of AZ to subnet."""
+        if self._subnet_map is None:
+            self._subnet_map = AWS().az_to_subnet()
+        return self._subnet_map
 
     @property
     def team_map(self):
@@ -676,7 +703,7 @@ fi
         self.add_output('SSH', '{0} SSH connect string'.format(resource_name),
                         self.join(
             'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att(resource_name, 'PublicDnsName')))
+            self.get_att(resource_name, 'PublicIp')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
@@ -706,9 +733,9 @@ fi
                                             ' to launch.'),
                                maxv=8, minv=1)
             self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
-                               default='db.t1.micro',
+                               default='db.{0}'.format(
+                                   self.DEFAULT_MULTI_INSTANCE),
                                description='The Database instance type.')
-            self.template['Mappings'] = {'Teams': self.team_map}
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
@@ -751,7 +778,7 @@ fi
             if self.memcached:
                 self.add_parameter(
                     'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
-                    default='t1.micro',
+                    default=self.DEFAULT_MULTI_INSTANCE,
                     description='The memcached instance type')
                 # Memcached EC2 Instance
                 sections = ['preamble', 'postamble']
@@ -769,7 +796,8 @@ fi
                             'services': {'sysvinit': {'memcached': ENABLE}}}}},
                     'Properties': {
                         'IamInstanceProfile': self.get_ref('TeamName'),
-                        'ImageId': self.DEFAULT_AMI,
+                        'ImageId': self.get_map(
+                            'AMIs', self.DEFAULT_MULTI_INSTANCE, 'ami'),
                         'InstanceType': self.get_ref('MemcachedInstanceType'),
                         'KeyName': self.get_ref('TeamName'),
                         'SecurityGroups': [self.get_ref('TeamName')],
@@ -777,7 +805,7 @@ fi
                     'Type': 'AWS::EC2::Instance'}
                 self.add_ssh_output('Memcached')
         else:
-            url = self.get_att('AppServer', 'PublicDnsName')
+            url = self.get_att('AppServer', 'PublicIp')
             self.add_ssh_output()
         self.add_output('URL', 'The URL to the rails application.',
                         self.join('http://', url))
@@ -887,19 +915,25 @@ fi
                 'packages': {
                     'packages': {'yum': {x: [] for x in self.yum_packages}}}}},
             'Properties': {'IamInstanceProfile': self.get_ref('TeamName'),
-                           'ImageId': self.ami,
+                           'ImageId': self.ami if self.ami else self.get_map(
+                               'AMIs', self.get_ref('AppInstanceType'), 'ami'),
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
-                           'SecurityGroups': [self.get_ref('TeamName')],
+                           'SecurityGroupIds': [self.get_map(
+                               'Teams', self.get_ref('TeamName'), 'sg')],
+                           'SubnetId': self.subnet_map.values()[0]['subnet'],
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
-                           default='t1.micro',
+                           default=self.DEFAULT_INSTANCE,
                            description='The AppServer instance type.')
-        self.add_parameter('TeamName', allowed=self.team_map.keys(),
-                           description='Your team name.',
-                           error_msg=('Must exactly match your team name '
-                                      'as shown in your Github URL.'))
+        self.add_parameter('TeamName', allowed=sorted(self.team_map.keys()),
+                           description='Your team name.')
+
+        self.template['Mappings'] = {'AMIs': self.ami_map,
+                                     'Subnets': self.subnet_map,
+                                     'Teams': self.team_map}
+
         if callback:
             callback()
         template = json.dumps(self.template, indent=4,
