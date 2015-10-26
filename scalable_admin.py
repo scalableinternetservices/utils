@@ -7,7 +7,7 @@ Usage:
   admin aws-cleanup
   admin aws-purge TEAM...
   admin aws-update-all
-  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--puma] [--memcached]
+  admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--puma] [--memcached]
   admin cftemplate tsung [--no-test] [--app-ami=ami]
   admin cftemplate passenger-ami
   admin cftemplate tsung-ami
@@ -45,7 +45,6 @@ S3_BUCKET = 'scalableinternetservices'
 
 
 class AWS(object):
-
     """This class handles AWS administrative tasks."""
 
     EC2_INSTANCES = ['t2.micro',
@@ -188,7 +187,7 @@ class AWS(object):
         # Configure security groups
         vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
         retval = self.op(self.ec2.create_security_group, GroupName=team,
-                            Description=team, VpcId=vpc['VpcId'])
+                         Description=team, VpcId=vpc['VpcId'])
         if retval:
             group_id = retval['GroupId']
         else:
@@ -348,7 +347,6 @@ class AWS(object):
 
 
 class CFTemplate(object):
-
     """Generate Scalable Internet Services Cloudformation templates."""
 
     DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
@@ -504,11 +502,6 @@ fi
 # Generate static assets
 user_sudo rake assets:precompile\
  || error_exit 'Failed to precompile static assets'
-""",
-            'webrick': """# Configure the app to serve static assets
-# Start up WEBrick (or whatever server is installed)
-user_sudo RAILS_SERVE_STATIC_FILES=true rails server -d -b 0.0.0.0\
- || error_exit 'Failed to start rails server'
 """,
             'passenger': """# Start passenger
 user_sudo passenger start -d --no-compile-runtime\
@@ -821,7 +814,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server)
 
-    def generate_stack(self, app_ami, memcached, multi, passenger, puma):
+    def generate_stack(self, app_ami, memcached, multi, puma):
         """Output the generated AWS cloudformation template.
 
         :param app_ami: (str) The AMI to use for the app server instance(s).
@@ -830,48 +823,38 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         :param multi: (boolean) Template moves the database to its own RDB
             instance, permits a variable number of app server instances, and
             distributes load to those instances via ELB.
-        :param passenger: (boolean) Use passenger standalone (nginx) as the
-            entry-point into each app server rather than `rails s` (WEBrick by
-            default).
-        :param puma: (boolean) Use puma instead of webrick.
+        :param puma: (boolean) Use puma instead of passenger.
+
+        Passenger standalone (uses nginx) will be used as the default
+        application sever if puma is not specified.
+
         """
         # Update stack specific instance variables
         if app_ami:
             self.ami = app_ami
         self.memcached = memcached
         self.multi = multi
-        self.passenger = passenger
         self.puma = puma
         self.yum_packages = self.PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
             if memcached:
                 self.yum_packages.add('memcached')
-        if passenger and not app_ami:
+        if not puma and not app_ami:
             self.yum_packages |= self.PACKAGES['passenger']
 
         name_parts = []
-
         # Identify stack plurality
         name_parts.append('Multi' if multi else 'Single')
-
         # Identify AppServer
-        if passenger:
-            name_parts.append('Passenger')
-        elif puma:
-            name_parts.append('Puma')
-        else:
-            name_parts.append('WEBrick')
-
+        name_parts.append('Puma' if puma else 'Passenger')
         # Identify Addons
         if memcached:
             name_parts.append('Memcached')
         if app_ami:
             name_parts.append('-' + app_ami)
-
+        # Create name
         self.name = ''.join(name_parts)
-        if passenger and not app_ami:
-            self.create_timeout = 'PT40M'
 
         sections = ['preamble', 'ruby', 'rails']
         if self.memcached:
@@ -880,18 +863,16 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 sections.append('memcached_configure_multi')
             else:
                 sections.append('memcached_configure_single')
-        if passenger:
+        if puma:
+            sections.append('puma')
+        else:
             if app_ami:
                 print('WARN: Ensure {0} has passenger pre-built for the '
                       'ec2-user account'.format(self.ami))
                 sections.remove('ruby')  # These actions have already occured.
-            else:  # Template installs passenger (this is slow)
+            else:
                 sections.append('passenger-install')
             sections.append('passenger')
-        elif puma:
-            sections.append('puma')
-        else:
-            sections.append('webrick')
         sections.append('postamble')
         resource = 'AppGroup' if self.multi else 'AppServer'
         return self.generate_template(sections, resource,
@@ -981,7 +962,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
 
 
 class UTC(tzinfo):
-
     """Specify the UTC timezone.
 
     From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
@@ -1150,7 +1130,6 @@ def main():
             return cf.generate_stack(app_ami=args['--app-ami'],
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
-                                     passenger=args['--passenger'],
                                      puma=args['--puma'])
     elif args['cftemplate-update-all']:
         bit_pos = ['passenger', 'multi', 'memcached', 'puma']
