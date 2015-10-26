@@ -539,20 +539,9 @@ user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma\
 """,
             'passenger-install': """# Install Passenger
 gem install passenger rake || error_exit 'Failed to install passenger gems'
-# Add swap space needed to build passenger if running on t1.micro
-if [ "{AppInstanceType}" == "t1.micro" ]; then
-  dd if=/dev/zero of=/swap bs=1M count=512\
-   || error_exit 'Failed to create swap file'
-  mkswap /swap || error_exit 'Failed to mkswap'
-  swapon /swap || error_exit 'Failed to enable swap'
-fi
 # Build and install passenger
 user_sudo /usr/local/bin/passenger start --runtime-check-only\
  || error_exit 'Failed to build or install passenger'
-if [ "{AppInstanceType}" == "t1.micro" ]; then
-  swapoff /swap || error_exit 'Failed to disable swap'
-  rm /swap || error_exit 'Failed to delete /swap'
-fi
 """,
             'postamble': """# All is well so signal success
 /opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
