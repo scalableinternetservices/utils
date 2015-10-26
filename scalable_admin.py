@@ -109,6 +109,14 @@ class AWS(object):
         self.ec2 = self.aws.create_client('ec2', self.REGION)
         self.iam = self.aws.create_client('iam', None)
 
+    def az_to_subnet(self):
+        """Return a mapping of availability zone to their subnet."""
+        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
+        subnets = self.op(self.ec2.describe_subnets, Filters=[
+            {'Name': 'vpc-id', 'Values': [vpc['VpcId']]}])['Subnets']
+        return {x['AvailabilityZone']: {'subnet': x['SubnetId']}
+                for x in subnets}
+
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
         cf = self.aws.create_client('cloudformation', self.REGION)
@@ -177,8 +185,7 @@ class AWS(object):
         self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
                 UserName=team)
 
-        # Configure security groups (one for vpc, and one for classic)
-        # * Find VPC
+        # Configure security groups
         vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
         retval = self.op(self.ec2.create_security_group, GroupName=team,
                             Description=team, VpcId=vpc['VpcId'])
@@ -609,6 +616,7 @@ fi
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
+        self._subnet_map = None
         self._team_map = None
 
     @property
@@ -619,6 +627,13 @@ fi
 
         return {x: {'ami': self.DEFAULT_AMIS[AWS.REGION][ami_type(x)]} for x in
                 AWS.EC2_INSTANCES}
+
+    @property
+    def subnet_map(self):
+        """Return a mapping of AZ to subnet."""
+        if self._subnet_map is None:
+            self._subnet_map = AWS().az_to_subnet()
+        return self._subnet_map
 
     @property
     def team_map(self):
@@ -917,7 +932,7 @@ fi
                            'KeyName': self.get_ref('TeamName'),
                            'SecurityGroupIds': [self.get_map(
                                'Teams', self.get_ref('TeamName'), 'sg')],
-                           'SubnetId': 'subnet-614e975c',  # TODO: Make dynamic
+                           'SubnetId': self.subnet_map.values()[0]['subnet'],
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
         self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
@@ -927,6 +942,7 @@ fi
                            description='Your team name.')
 
         self.template['Mappings'] = {'AMIs': self.ami_map,
+                                     'Subnets': self.subnet_map,
                                      'Teams': self.team_map}
 
         if callback:
