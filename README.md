@@ -114,15 +114,28 @@ you issue a `gh` command. An access token will be saved to
 `~/.config/github_creds`. The github account you use should have admin rights
 to the github organization.
 
-__Update _constant_ values in `scalable_admin.py`__:
+__Create/update `$(HOME)/.config/scalable_admin.json`
 
-* __GH_ORGANIZATION__: If you are using a different github organization, change
-  this value to reflect your organization. This will permit the following
-  commands to work as intended.
+The file has three keys that need to be set:
 
-* __S3_BUCKET__: Change this value to reflect the S3 bucket where you would
-  like your cloudformation templates to be stored. Teams will also be permitted
-  to PUT/GET items from `S3_BUCKET/TEAMNAME/`.
+* __aws_region__: Set this value to permit students access to that single AWS
+  region.
+
+* __github_organization__: Set this value to reflect your github organization.
+
+* __s3_bucket__: Set this value to reflect the S3 bucket where you would like
+  your cloudformation templates to be stored. Teams will also be permitted to
+  PUT/GET items from `s3_bucket/TEAMNAME/`.
+
+Below is an example of the contents of the json file:
+
+```json
+{
+"aws_region": "us-east-1",
+"github_organization": "scalableinternetservices",
+"s3_bucket": "cs290b"
+}
+```
 
 ## Commands
 
@@ -156,7 +169,7 @@ Use this command to update the permissions for all teams. The list of teams is
 dynamically determined from the security group names excluding those that begin
 with `default`.
 
-### ./admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--passenger] [--memcached]
+### ./scalable_admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--memcached]
 
 This command will generate a cloud formation template usable by any of the
 teams configured via `scalable_admin.py aws TEAM...`. On success, the S3 url to
@@ -172,7 +185,7 @@ By default all app EC2 instances use the Amazon Linux AMI as specified in
 `CFTemplate.DEFAULT_AMI`. This value should be updated as Amazon releases newer
 versions of the AMI. The `--app-ami` parameter can also be used to change the
 AMI for a generated cloudformation template. This is primarily useful for
-provding an EC2 AMI with _passenger_ precompiled.
+providing an EC2 AMI with _passenger_ precompiled.
 
 The `--multi` flag is used to generate a cloudformation template utilizing a
 load balancer to distribute requests to 1 to 8 app EC2 instances, backed by an
