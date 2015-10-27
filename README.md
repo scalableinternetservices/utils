@@ -37,11 +37,13 @@ configured to work as described above for its corresponding type.
     * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassenger.json
 * __NGINX + Passenger + mecmached__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassengerMemcached.json
 * __Puma__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
     * (UCSB) https://cs290b.s3.amazonaws.com/MultiPuma.json
 * __Puma + mecmached__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPumaMemcached.json
 
 ## Other Templates
 
@@ -56,18 +58,18 @@ configured to work as described above for its corresponding type.
 
 Add the file `.rails_initialize` to the root of your application's
 repository. This should contain commands that execute as the ec2-user just
-after running `rake db:migrate`. Commands that require root should be
-prefixed with `sudo`. An example is provided below:
+after running `rake db:migrate`. Commands that require root should be prefixed
+with `sudo`. An example is provided below:
 
 __.rails_initialize__
 
     rake db:seed
 
-If you need to execute commands before installing gems, add the file `.ec2_initialize` 
-to the root of your application's
-repository. This should contain commands that execute as the ec2-user just
-*before* running `rake db:migrate`. Commands that require root should be
-prefixed with `sudo`. An example is provided below:
+If you need to execute commands before installing gems, add the file
+`.ec2_initialize` to the root of your application's repository. This should
+contain commands that execute as the ec2-user just *before* running `rake
+db:migrate`. Commands that require root should be prefixed with `sudo`. An
+example is provided below:
 
 __.ec2_initialize__
 
@@ -96,7 +98,7 @@ NGINX configuration you require.
 # scalable_admin.py
 
 Provides the functionality necessary to administrate github and AWS for the
-purposes of CS290 classes.
+purposes of Scalable Internet Services classes.
 
 
 ## Set up
