@@ -6,20 +6,24 @@ Both the app server, and database are located on a single EC2 instance.
 
 * __NGINX + Passenger__ (Recommended for regular testing):  
   NGINX handles requests to port 80 and passes connections to instances of the
-  app through Passenger. Multiple concurrent connections are supported.  
+  app through Passenger. Multiple concurrent connections are supported.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassenger.json
     * (UCSB) https://cs290b.s3.amazonaws.com/SinglePassenger.json
 * __NGINX + Passenger + memcached__:  
   Same as above, with the addition of using memcached through the `dalli` gem.
-  https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePassengerMemcached.json
 * __Puma__:  
-  Puma allows both thread-based and process-based concurrency. 
-  https://scalableinternetservices.s3.amazonaws.com/SinglePuma.json
+  Puma allows both thread-based and process-based concurrency.
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePuma.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePuma.json
+* __Puma + memcached__:  
+  Same as above, with the addition of using memcached through the `dalli` gem.
+    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePumaMemcached.json
 * __WEBrick__ (Use only for slow-performance testing):  
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SingleWEBrick.json
-    * (UCSB) Use NGINX + Passenger (above)
 
 
 ## Multiple Instance Templates
@@ -28,21 +32,23 @@ These templates launch stacks where a load balancer (ELB) distributes requests
 across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
-* __NGINX + Passenger__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPassenger-ami-c5c4f9f5.json
-* __NGINX + Passenger + mecmached__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
-* __Puma__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
-* __Puma + mecmached__:  
-  https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
+* __NGINX + Passenger__:
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassenger-ami-c5c4f9f5.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassenger.json
+* __NGINX + Passenger + mecmached__:
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
+* __Puma__:
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
+    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPuma.json
+* __Puma + mecmached__:
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
 
 ## Other Templates
 
 * __Tsung__:  
   This instance provides an installed version of Tsung at your disposal. You
   will need to copy/rsync over your tsung xml tests.
-  https://scalableinternetservices.s3.amazonaws.com/SingleTsung-ami-f56657c5.json
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SingleTsung-ami-f56657c5.json
 
 
 
