@@ -810,7 +810,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             if self.memcached:
                 self.add_parameter('MemcachedInstanceType',
                                    allowed=instances, default=instances[0],
-                                   description='The memcached instance type')
+                                   description='The memcached instance type.')
                 # Memcached EC2 Instance
                 sections = ['preamble', 'postamble']
                 userdata = self.join(*(
