@@ -19,6 +19,7 @@ Usage:
 from __future__ import print_function
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
+from pkg_resources import resource_stream
 from pprint import pprint
 from string import Formatter
 import botocore.exceptions
@@ -429,10 +430,7 @@ class CFTemplate(object):
 
     @classmethod
     def segment(cls, name):
-        from pkg_resources import resource_stream
-        tmp = resource_stream(__name__, 'segments/{0}.sh'.format(name))
-        print(tmp)
-        sys.exit(1)
+        return resource_stream(__name__, 'segments/{0}.sh'.format(name)).read()
 
     @classmethod
     def subnet_map(cls):

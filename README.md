@@ -147,7 +147,7 @@ Below is an example of the contents of the json file:
 
 ## Commands
 
-### ./scalable_admin.py aws TEAM...
+### scalable_admin aws TEAM...
 
 Use this command to configure the AWS permissions for one ore more
 teams. On first run for a team this command will create the account, outputting
@@ -157,7 +157,7 @@ Subsequent runs can be used to make updates to a team's permissions. This is
 only necessary if the permission settings have been modified in the
 `scalable_admin.py` file.
 
-### ./scalable_admin.py aws-cleanup
+### scalable_admin aws-cleanup
 
 This command will delete stacks that are more than 8 hours old. It is useful to
 run this as a cron job. The following crontab entry will run this command every
@@ -165,19 +165,19 @@ hour on the 31st minute:
 
     31 * * * * /path/to/the/script/utils/scalable_admin.py aws-cleanup
 
-### ./scalable_admin.py aws-purge TEAM...
+### scalable_admin aws-purge TEAM...
 
 Use this command to completely remove one or more teams' permissions. This
 command may fail if the AWS user for the team was manually modified through the
 IAM web interface.
 
-### ./scalable_admin.py aws-update-all
+### scalable_admin aws-update-all
 
 Use this command to update the permissions for all teams. The list of teams is
 dynamically determined from the security group names excluding those that begin
 with `default`.
 
-### ./scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
+### scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
 
 This command will generate a cloud formation template usable by any of the
 teams configured via `scalable_admin.py aws TEAM...`. On success, the S3 url to
@@ -205,12 +205,12 @@ The `--memached` flag will add memcached to the stack. When used in combination
 with `--multi`, memcached will run on its own instance, otherwise it'll share
 the same EC2 instance with the app server and database.
 
-### ./scalable_admin.py cftemplate tsung [--no-test]
+### scalable_admin cftemplate tsung [--no-test]
 
 Generate a cloudformation template to generate stacks that run the load testing
 tool funkload. The `--no-test` flag works as described above.
 
-### ./scalable_admin.py cftemplate tsung-ami
+### scalable_admin cftemplate tsung-ami
 
 Generate a cloudformation template useful to build a tsung ami. This template
 specifies an EC2 instance that already has the tsung environment created on
@@ -218,13 +218,13 @@ launch, and cleans up the environment so that an AMI can be immediately
 generated following this document:
 http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-instance-store.html
 
-### ./scalable_admin.py cftemplate-update-all [--no-test] [--passenger-ami=ami]
+### scalable_admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
 
 Update all permutations of the application server stacks (not tsung). This is
 useful to quickly change the allowable instance types, or to make any changes
 that should apply to all app-server templates.
 
-### ./scalable_admin.py gh TEAM USER...
+### scalable_admin gh TEAM USER...
 
 Use this command to create a git repository, if it does not already exist, and
 add invite list of github USERs to the repository if they have not already been
