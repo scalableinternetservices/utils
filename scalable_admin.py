@@ -40,7 +40,7 @@ GH_ORGANIZATION = S3_BUCKET = None
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
-    # The first instance listed (or of a filter) will be the default.
+    # The first instance listed will be the default.
     EC2_INSTANCES = ['t2.micro',
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                      'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
@@ -369,7 +369,6 @@ class CFTemplate(object):
                                   'instance': 'ami-65116700'},
                     'us-west-2': {'ebs': 'ami-9ff7e8af',
                                   'instance': 'ami-bbf7e88b'}}
-    DEFAULT_MULTI_INSTANCE = 'm3.medium'
     # The following strings are python-format strings, however, the values
     # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
     # escape intended brackets: '{' => '{{', '}' => '}}'
@@ -603,7 +602,13 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         return retval
 
     @staticmethod
+    def multi_instance_filter(instances):
+        """Filter out t2 instance types."""
+        return [x for x in instances if not x.startswith('t2')]
+
+    @staticmethod
     def tsung_instance_filter(instances):
+        """Filter out anything but m3 instance types."""
         return [x for x in instances if x.startswith('m3')]
 
     @classmethod
@@ -753,14 +758,14 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                                             ' worker processes.'))
 
         if self.multi:
+            instances = self.multi_instance_filter(AWS.EC2_INSTANCES)
             url = self.get_att('LoadBalancer', 'DNSName')
             self.add_parameter('AppInstances', 'Number', default=2,
                                description=('The number of AppServer instances'
                                             ' to launch.'),
                                maxv=8, minv=1)
             self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
-                               default='db.{0}'.format(
-                                   self.DEFAULT_MULTI_INSTANCE),
+                               default=AWS.RDB_INSTANCES[0],
                                description='The Database instance type.')
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
@@ -803,10 +808,9 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'Subnets': self.subnets},
                 'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
             if self.memcached:
-                self.add_parameter(
-                    'MemcachedInstanceType', allowed=AWS.EC2_INSTANCES,
-                    default=self.DEFAULT_MULTI_INSTANCE,
-                    description='The memcached instance type')
+                self.add_parameter('MemcachedInstanceType',
+                                   allowed=instances, default=instances[0],
+                                   description='The memcached instance type')
                 # Memcached EC2 Instance
                 sections = ['preamble', 'postamble']
                 userdata = self.join(*(
@@ -824,7 +828,8 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                     'Properties': {
                         'IamInstanceProfile': self.get_ref('TeamName'),
                         'ImageId': self.get_map(
-                            'AMIs', self.DEFAULT_MULTI_INSTANCE, 'ami'),
+                            'AMIs', self.get_ref('MemcachedInstanceType'),
+                            'ami'),
                         'InstanceType': self.get_ref('MemcachedInstanceType'),
                         'KeyName': self.get_ref('TeamName'),
                         'SecurityGroups': [self.get_ref('TeamName')],
@@ -893,9 +898,12 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             sections.append('passenger-install')
             sections.append('passenger')
         sections.append('postamble')
+
         resource = 'AppGroup' if self.multi else 'AppServer'
+        instance_filter = self.multi_instance_filter if self.multi else None
         return self.generate_template(sections, resource,
-                                      callback=self.callback_stack)
+                                      callback=self.callback_stack,
+                                      instance_filter=instance_filter)
 
     def generate_template(self, sections, resource, callback=None,
                           instance_filter=None):
