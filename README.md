@@ -169,7 +169,7 @@ Use this command to update the permissions for all teams. The list of teams is
 dynamically determined from the security group names excluding those that begin
 with `default`.
 
-### ./scalable_admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--memcached]
+### ./scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
 
 This command will generate a cloud formation template usable by any of the
 teams configured via `scalable_admin.py aws TEAM...`. On success, the S3 url to
@@ -181,22 +181,17 @@ default, template names (before the `.json` extension) are suffixed with
 `Test`. When you are sure you want to replace the _production_ template, use
 the `--no-test` option when generating the template.
 
-By default all app EC2 instances use the Amazon Linux AMI as specified in
-`CFTemplate.DEFAULT_AMI`. This value should be updated as Amazon releases newer
-versions of the AMI. The `--app-ami` parameter can also be used to change the
-AMI for a generated cloudformation template. This is primarily useful for
-providing an EC2 AMI with _passenger_ precompiled.
+By default all EC2 instances use the Amazon Linux AMI corresponding to their
+region and instance type as specified in `CFTemplate.DEFAULT_AMIS`. These
+values should be updated as Amazon releases newer versions of the AMI.
 
 The `--multi` flag is used to generate a cloudformation template utilizing a
 load balancer to distribute requests to 1 to 8 app EC2 instances, backed by an
 RDS database instance. When `--multi` is not not provided, the cloudformation
 template will result in a stack that runs on a single EC2 instance.
 
-The `--passenger` flag will result in app instances that are served via
-_passenger-standalone_, rather than `rails s` (WEBrick by default). When
-`--app-ami` is provided along with the `--passenger` flag, the cloudformation
-template will assume passenger is precompiled in the provided AMI, otherwise,
-it will be built on instance launch.
+By default app instances that are served via _passenger-standalone_. The
+`--puma` option can be provided to use Puma as the application server.
 
 The `--memached` flag will add memcached to the stack. When used in combination
 with `--multi`, memcached will run on its own instance, otherwise it'll share
@@ -207,18 +202,19 @@ the same EC2 instance with the app server and database.
 Generate a cloudformation template to generate stacks that run the load testing
 tool funkload. The `--no-test` flag works as described above.
 
-### ./scalable_admin.py cftemplate passenger-ami
+### ./scalable_admin.py cftemplate tsung-ami
 
-Generate a cloudformation template useful to build a passenger ami. This
-template specifies an EC2 instance that precompiles passenger on launch, and
-cleans up the environment so that an AMI can be immediately generated following
-this document:
+Generate a cloudformation template useful to build a tsung ami. This template
+specifies an EC2 instance that already has the tsung environment created on
+launch, and cleans up the environment so that an AMI can be immediately
+generated following this document:
 http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html
 
 ### ./scalable_admin.py cftemplate-update-all [--no-test] [--passenger-ami=ami]
 
-Update all permutations of the APP-based stacks. The `--pasenger-ami` flag is
-used to set the AMI for all permutations involving passenger.
+Update all permutations of the application server stacks (not tsung). This is
+useful to quickly change the allowable instance types, or to make any changes
+that should apply to all app-server templates.
 
 ### ./scalable_admin.py gh TEAM USER...
 
