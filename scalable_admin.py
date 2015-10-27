@@ -40,6 +40,7 @@ GH_ORGANIZATION = S3_BUCKET = None
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
+    # The first instance listed (or of a filter) will be the default.
     EC2_INSTANCES = ['t2.micro',
                      'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                      'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
@@ -368,7 +369,6 @@ class CFTemplate(object):
                                   'instance': 'ami-65116700'},
                     'us-west-2': {'ebs': 'ami-9ff7e8af',
                                   'instance': 'ami-bbf7e88b'}}
-    DEFAULT_INSTANCE = 't2.micro'
     DEFAULT_MULTI_INSTANCE = 'm3.medium'
     # The following strings are python-format strings, however, the values
     # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
@@ -602,6 +602,10 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                         retval[-1]['Ref'] += ':' + item[2]
         return retval
 
+    @staticmethod
+    def tsung_instance_filter(instances):
+        return [x for x in instances if x.startswith('m3')]
+
     @classmethod
     def subnet_map(cls):
         """Return a mapping of AZ to subnet."""
@@ -647,17 +651,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             self._team_map = AWS().team_to_security_group()
         return self._team_map
 
-    def _add_cleanup_output(self):
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
-
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
@@ -695,6 +688,18 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             conf['Properties']['SecurityGroupIds'] = [self.get_map(
                 'Teams', self.get_ref('TeamName'), 'sg')]
             conf['Properties']['SubnetId'] = self.default_subnet
+
+    def add_cleanup_output(self):
+        """Output clean-up commands to run prior to generating an AMI."""
+        clean = ['sudo yum clean all',
+                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
+                  '{} \;'),
+                 'sudo rm -f /root/.ssh/authorized_keys',
+                 'sudo rm -f /root/.bash_history',
+                 'rm -f /home/ec2-user/.ssh/authorized_keys',
+                 'rm -f /home/ec2-user/.bash_history']
+        self.add_output('Cleanup', 'Commands to run before making snapshot',
+                        '; '.join(clean))
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -892,7 +897,8 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         return self.generate_template(sections, resource,
                                       callback=self.callback_stack)
 
-    def generate_template(self, sections, resource, callback=None):
+    def generate_template(self, sections, resource, callback=None,
+                          instance_filter=None):
         """Generate the common template functionality.
 
         :param callback: Call the callback function prior to returning if
@@ -902,6 +908,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         userdata = self.join(*(
             item for section in sections for item in self.join_format(
                 self.INIT[section].replace('%%RESOURCE%%', resource))))
+
         self.template['Resources']['AppServer'] = {
             'Metadata': {'AWS::CloudFormation::Init': {
                 'configSets': {'default': ['packages']},
@@ -914,9 +921,15 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                            'KeyName': self.get_ref('TeamName'),
                            'UserData': {'Fn::Base64': userdata}},
             'Type': 'AWS::EC2::Instance'}
-        self.add_parameter('AppInstanceType', allowed=AWS.EC2_INSTANCES,
-                           default=self.DEFAULT_INSTANCE,
+
+        if instance_filter:
+            instances = instance_filter(AWS.EC2_INSTANCES)
+        else:
+            instances = AWS.EC2_INSTANCES
+        self.add_parameter('AppInstanceType', allowed=instances,
+                           default=instances[0],
                            description='The AppServer instance type.')
+
         self.add_parameter('TeamName', allowed=sorted(self.team_map.keys()),
                            description='Your team name.')
 
@@ -942,34 +955,35 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         return 1
 
     def generate_tsung(self, app_ami=None):
-        """Output the cloudformation template for a tsung instance.
+        """Output the cloudformation template for a Tsung instance.
 
         :param app_ami: (str) The AMI to use for the tsung EC2 instance.
 
         """
+        sections = ['preamble', 'tsung', 'tsung_runtime', 'postamble']
         if app_ami:
             self.ami = app_ami
-            sections = ['preamble', 'tsung_runtime', 'postamble']
+            sections.remove('tsung')
         else:
-            sections = ['preamble', 'tsung', 'postamble']
+            self.create_timeout = 'PT45M'
+            self.yum_packages = self.PACKAGES['tsung']
         self.name = 'Tsung'
-        self.create_timeout = 'PT45M'
-        self.yum_packages = self.PACKAGES['tsung']
         self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
+                                      self.callback_single_server,
+                                      self.tsung_instance_filter)
 
     def generate_tsung_ami(self):
-        """Output the template used to create an up-to-date tsung AMI."""
+        """Output the template used to create an up-to-date Tsung AMI."""
         self.name = 'TsungAMI'
         self.create_timeout = 'PT45M'
         self.test = False
         self.yum_packages = self.PACKAGES['tsung']
-        sections = ['preamble', 'tsung_preamble', 'tsung', 'postamble']
+        self.add_cleanup_output()
         self.add_ssh_output()
-        self._add_cleanup_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
+        return self.generate_template(['preamble', 'tsung', 'postamble'],
+                                      'AppServer', self.callback_single_server,
+                                      self.tsung_instance_filter)
 
 
 class UTC(tzinfo):
