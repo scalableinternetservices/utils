@@ -703,7 +703,6 @@ class CFTemplate(object):
         if puma:
             sections.append('puma')
         else:
-            sections.append('passenger_install')
             sections.append('passenger')
         sections.append('postamble')
 
