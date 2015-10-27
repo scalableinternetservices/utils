@@ -14,17 +14,27 @@ echo "net.ipv4.tcp_max_syn_backlog = 2048" | tee -a /etc/sysctl.conf || error_ex
 echo "net.ipv4.tcp_syncookies = 1" | tee -a /etc/sysctl.conf || error_exit 'Error setting sysctl config'
 sysctl -p
 
+# Change to the app directory
+cd /home/ec2-user/
+
 # Build Tsung
-user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.6.0.tar.gz
-user_sudo tar -xvzf tsung-1.6.0.tar.gz
+user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.6.0.tar.gz || error_exit 'Failed to download tsung.'
+user_sudo tar -xvzf tsung-1.6.0.tar.gz || error_exit 'Failed to extract tsung'
 cd tsung-1.6.0
-user_sudo ./configure
-user_sudo make
-make install
+user_sudo ./configure  || error_exit 'Failed to configure tsung'
+user_sudo make || error_exit 'Failed to make tsung'
+make install || error_exit 'Failed to install tsung'
 
 # Clean up
 cd ..
 user_sudo rm -rf tsung-1.6.0*
 
+# Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
+
+# Create tsung log directory (for webserver)
+user_sudo mkdir -p .tsung/log || error_exit 'Failed to create tsung log directory'
+
 # Start simple HTTP Server for Results
-ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot => '/home/ec2-user/.tsung/log').start" &
+cd .tsung/log
+user_sudo python -m SimpleHTTPServer 3000&

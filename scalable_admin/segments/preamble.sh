@@ -3,6 +3,7 @@ yum update -y aws-cfn-bootstrap
 yum update
 # Helper function
 function error_exit {{
+    echo "ERROR: $1"
     /opt/aws/bin/cfn-signal -e 1 -r "$1" --stack {AWS::StackName}       --resource %%RESOURCE%% --region {AWS::Region}
     exit 1
 }}

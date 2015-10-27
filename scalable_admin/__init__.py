@@ -775,6 +775,10 @@ class CFTemplate(object):
         self.name = 'Tsung'
         self.yum_packages = self.PACKAGES['tsung']
         self.add_ssh_output()
+        url = self.get_att('AppServer', 'PublicIp')
+        self.add_output('URL', 'The URL to the rails application.',
+                        self.join('http://', url))
+
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server,
                                       self.tsung_instance_filter)
