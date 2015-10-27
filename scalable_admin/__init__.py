@@ -8,8 +8,7 @@ Usage:
   scalable_admin aws-purge TEAM...
   scalable_admin aws-update-all
   scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
-  scalable_admin cftemplate tsung [--no-test] [--ami=ami]
-  scalable_admin cftemplate tsung-ami
+  scalable_admin cftemplate tsung [--no-test]
   scalable_admin cftemplate-update-all [--no-test]
   scalable_admin gh TEAM USER...
 
@@ -373,9 +372,7 @@ class CFTemplate(object):
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
                           'ruby21-devel'},
-                'tsung': {'gcc', 'python27', 'git', 'autoconf',
-                          'gnuplot',
-                          'perl-CPAN', 'ncurses-devel', 'openssl-devel'}}
+                'tsung': {'autoconf', 'erlang', 'gcc-c++'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -514,14 +511,6 @@ class CFTemplate(object):
             conf['Properties']['SecurityGroupIds'] = [self.get_map(
                 'Teams', self.get_ref('TeamName'), 'sg')]
             conf['Properties']['SubnetId'] = self.default_subnet
-
-    def add_cleanup_output(self):
-        """Output clean-up commands to run prior to generating an AMI."""
-        clean = ['sudo yum clean all',
-                 ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;')]
-        self.add_output('Cleanup', 'Commands to run before making snapshot',
-                        '; '.join(clean))
 
     def add_output(self, name, description, value):
         """Add a template output value."""
@@ -781,35 +770,14 @@ class CFTemplate(object):
                 return 0
         return 1
 
-    def generate_tsung(self, app_ami=None):
-        """Output the cloudformation template for a Tsung instance.
-
-        :param app_ami: (str) The AMI to use for the tsung EC2 instance.
-
-        """
-        sections = ['preamble', 'tsung', 'tsung_runtime', 'postamble']
-        if app_ami:
-            self.ami = app_ami
-            sections.remove('tsung')
-        else:
-            self.create_timeout = 'PT45M'
-            self.yum_packages = self.PACKAGES['tsung']
+    def generate_tsung(self):
+        """Output the cloudformation template for a Tsung instance."""
+        sections = ['preamble', 'tsung', 'postamble']
         self.name = 'Tsung'
+        self.yum_packages = self.PACKAGES['tsung']
         self.add_ssh_output()
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server,
-                                      self.tsung_instance_filter)
-
-    def generate_tsung_ami(self):
-        """Output the template used to create an up-to-date Tsung AMI."""
-        self.name = 'TsungAMI'
-        self.create_timeout = 'PT45M'
-        self.test = False
-        self.yum_packages = self.PACKAGES['tsung']
-        self.add_cleanup_output()
-        self.add_ssh_output()
-        return self.generate_template(['preamble', 'tsung', 'postamble'],
-                                      'AppServer', self.callback_single_server,
                                       self.tsung_instance_filter)
 
 
@@ -1000,9 +968,7 @@ def main():
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
         if args['tsung']:
-            return cf.generate_tsung(app_ami=args['--ami'])
-        elif args['tsung-ami']:
-            return cf.generate_tsung_ami()
+            return cf.generate_tsung()
         else:
             return cf.generate_stack(app_ami=args['--ami'],
                                      memcached=args['--memcached'],
