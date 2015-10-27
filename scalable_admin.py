@@ -832,7 +832,9 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                             'ami'),
                         'InstanceType': self.get_ref('MemcachedInstanceType'),
                         'KeyName': self.get_ref('TeamName'),
-                        'SecurityGroups': [self.get_ref('TeamName')],
+                        'SecurityGroupIds': [self.get_map(
+                            'Teams', self.get_ref('TeamName'), 'sg')],
+                        'SubnetId': self.default_subnet,
                         'UserData': {'Fn::Base64': userdata}},
                     'Type': 'AWS::EC2::Instance'}
                 self.add_ssh_output('Memcached')
