@@ -698,11 +698,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         """Output clean-up commands to run prior to generating an AMI."""
         clean = ['sudo yum clean all',
                  ('sudo find /var/log -type f -exec sudo truncate --size 0 '
-                  '{} \;'),
-                 'sudo rm -f /root/.ssh/authorized_keys',
-                 'sudo rm -f /root/.bash_history',
-                 'rm -f /home/ec2-user/.ssh/authorized_keys',
-                 'rm -f /home/ec2-user/.bash_history']
+                  '{} \;')]
         self.add_output('Cleanup', 'Commands to run before making snapshot',
                         '; '.join(clean))
 
