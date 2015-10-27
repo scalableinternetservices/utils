@@ -7,11 +7,10 @@ Usage:
   scalable_admin aws-cleanup
   scalable_admin aws-purge TEAM...
   scalable_admin aws-update-all
-  scalable_admin cftemplate [--no-test] [--app-ami=ami] [--multi] [--puma] [--memcached]
-  scalable_admin cftemplate tsung [--no-test] [--app-ami=ami]
-  scalable_admin cftemplate passenger-ami
+  scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
+  scalable_admin cftemplate tsung [--no-test] [--ami=ami]
   scalable_admin cftemplate tsung-ami
-  scalable_admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
+  scalable_admin cftemplate-update-all [--no-test]
   scalable_admin gh TEAM USER...
 
 -h --help  show this message
@@ -565,6 +564,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 'Outputs': {},
                 'Parameters': {},
                 'Resources': {}}
+    _subnet_map = None
 
     @staticmethod
     def get_att(resource, attribute):
@@ -602,6 +602,13 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                         retval[-1]['Ref'] += ':' + item[2]
         return retval
 
+    @classmethod
+    def subnet_map(cls):
+        """Return a mapping of AZ to subnet."""
+        if cls._subnet_map is None:
+            cls._subnet_map = AWS().az_to_subnet()
+        return cls._subnet_map
+
     def __init__(self, test):
         """Initialize the CFTemplate class.
 
@@ -612,7 +619,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
-        self._subnet_map = None
         self._team_map = None
 
     @property
@@ -630,16 +636,9 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         return sorted(self.subnets)[0]
 
     @property
-    def subnet_map(self):
-        """Return a mapping of AZ to subnet."""
-        if self._subnet_map is None:
-            self._subnet_map = AWS().az_to_subnet()
-        return self._subnet_map
-
-    @property
     def subnets(self):
         """Return a list of VPC subnets."""
-        return [x['subnet'] for x in self.subnet_map.values()]
+        return [x['subnet'] for x in self.subnet_map().values()]
 
     @property
     def team_map(self):
@@ -834,18 +833,6 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                         self.join('http://', url))
         self.add_apps()
 
-    def generate_passenger_ami(self):
-        """Output the template used to create an up-to-date passenger AMI."""
-        self.name = 'PassengerAMI'
-        self.create_timeout = 'PT20M'
-        self.test = False
-        self.yum_packages = self.PACKAGES['passenger']
-        sections = ['preamble', 'ruby', 'passenger-install', 'postamble']
-        self.add_ssh_output()
-        self._add_cleanup_output()
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server)
-
     def generate_stack(self, app_ami, memcached, multi, puma):
         """Output the generated AWS cloudformation template.
 
@@ -872,7 +859,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
             self.yum_packages.add('mysql-server')
             if memcached:
                 self.yum_packages.add('memcached')
-        if not puma and not app_ami:
+        if not (puma or app_ami):
             self.yum_packages |= self.PACKAGES['passenger']
 
         name_parts = []
@@ -898,12 +885,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         if puma:
             sections.append('puma')
         else:
-            if app_ami:
-                print('WARN: Ensure {0} has passenger pre-built for the '
-                      'ec2-user account'.format(self.ami))
-                sections.remove('ruby')  # These actions have already occured.
-            else:
-                sections.append('passenger-install')
+            sections.append('passenger-install')
             sections.append('passenger')
         sections.append('postamble')
         resource = 'AppGroup' if self.multi else 'AppServer'
@@ -939,7 +921,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                            description='Your team name.')
 
         self.template['Mappings'] = {'AMIs': self.ami_map,
-                                     'Subnets': self.subnet_map,
+                                     'Subnets': self.subnet_map(),
                                      'Teams': self.team_map}
 
         if callback:
@@ -1176,28 +1158,21 @@ def main():
         return 0
     elif args['cftemplate']:
         cf = CFTemplate(test=not args['--no-test'])
-        if args['passenger-ami']:
-            return cf.generate_passenger_ami()
-        elif args['tsung']:
-            return cf.generate_tsung(app_ami=args['--app-ami'])
+        if args['tsung']:
+            return cf.generate_tsung(app_ami=args['--ami'])
         elif args['tsung-ami']:
             return cf.generate_tsung_ami()
         else:
-            return cf.generate_stack(app_ami=args['--app-ami'],
+            return cf.generate_stack(app_ami=args['--ami'],
                                      memcached=args['--memcached'],
                                      multi=args['--multi'],
                                      puma=args['--puma'])
     elif args['cftemplate-update-all']:
-        bit_pos = ['passenger', 'multi', 'memcached', 'puma']
+        bit_pos = ['memcached', 'puma', 'multi']
         for i in range(2 ** len(bit_pos)):
             kwargs = {'app_ami': None}
             for bit, argument in enumerate(bit_pos):
-                if i & 2 ** bit:
-                    kwargs[argument] = True
-                    if argument == 'passenger' and args['--passenger-ami']:
-                        kwargs['app_ami'] = args['--passenger-ami']
-                else:
-                    kwargs[argument] = False
+                kwargs[argument] = bool(i & 2 ** bit)
             cf = CFTemplate(test=not args['--no-test'])
             retval = cf.generate_stack(**kwargs)
             if retval:
