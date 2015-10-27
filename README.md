@@ -216,7 +216,7 @@ Generate a cloudformation template useful to build a tsung ami. This template
 specifies an EC2 instance that already has the tsung environment created on
 launch, and cleans up the environment so that an AMI can be immediately
 generated following this document:
-http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html
+http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-instance-store.html
 
 ### ./scalable_admin.py cftemplate-update-all [--no-test] [--passenger-ami=ami]
 
