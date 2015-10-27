@@ -19,6 +19,7 @@ Usage:
 from __future__ import print_function
 from datetime import datetime, timedelta, tzinfo
 from docopt import docopt
+from pkg_resources import resource_stream
 from pprint import pprint
 from string import Formatter
 import botocore.exceptions
@@ -364,194 +365,10 @@ class AWS(object):
 
 class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
-
     DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
                                   'instance': 'ami-65116700'},
                     'us-west-2': {'ebs': 'ami-9ff7e8af',
                                   'instance': 'ami-bbf7e88b'}}
-    # The following strings are python-format strings, however, the values
-    # between brackets will be replaced with `{'Ref': 'value'}`. Make sure to
-    # escape intended brackets: '{' => '{{', '}' => '}}'
-    INIT = {'preamble': """#!/bin/bash -v
-yum update -y aws-cfn-bootstrap
-yum update
-# Helper function
-function error_exit {{
-    /opt/aws/bin/cfn-signal -e 1 -r "$1" --stack {AWS::StackName} \
-      --resource %%RESOURCE%% --region {AWS::Region}
-    exit 1
-}}
-# Run cfn-init (see AWS::CloudFormation::Init)
-/opt/aws/bin/cfn-init -s {AWS::StackName} -r AppServer \
-  --region {AWS::Region} || error_exit 'Failed to run cfn-init'
-# Don't require tty to run sudo
-sed -i 's/ requiretty/ !requiretty/' /etc/sudoers
-function user_sudo {{
-    sudo -u ec2-user bash -lc "$*"
-}}
-""",
-            'tsung': """# Install tsung environment
-echo "*  soft  nofile  1024000" | tee -a /etc/security/limits.conf\
- || error_exit 'Error setting nofile limits'
-echo "*  hard  nofile  1024000" | tee -a /etc/security/limits.conf\
- || error_exit 'Error setting nofile limits'
-echo "net.core.rmem_max = 16777216" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.core.wmem_max = 16777216" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_wmem = 4096 65536 16777216" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_mem = 50576 64768 98152" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.core.netdev_max_backlog = 2048" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.core.somaxconn = 1024" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_max_syn_backlog = 2048" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-echo "net.ipv4.tcp_syncookies = 1" | tee -a /etc/sysctl.conf\
- || error_exit 'Error setting sysctl config'
-sysctl -p
-export HOME=/home/ec2-user/
-cd $HOME/
-user_sudo mkdir /home/ec2-user/opt
-user_sudo wget http://www.erlang.org/download/otp_src_R16B03-1.tar.gz
-user_sudo tar xzf otp_src_R16B03-1.tar.gz
-cd otp_src_R16B03-1
-user_sudo ./configure --prefix=/home/ec2-user/opt/erlang-R16B03-1
-user_sudo make install
-user_sudo echo 'pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin'\
- > /etc/profile.d/erlang.sh
-user_sudo chmod +x /etc/profile.d/erlang.sh
-user_sudo pathmunge /home/ec2-user/opt/erlang-R16B03-1/bin
-cd $HOME
-user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.5.0.tar.gz
-user_sudo tar xzf tsung-1.5.0.tar.gz
-cd tsung-1.5.0
-user_sudo ./configure --prefix=$HOME/opt/tsung-1.5.0
-user_sudo make install
-cpan Template
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/bin'\
- > /etc/profile.d/tsung.sh
-user_sudo echo 'pathmunge /home/ec2-user/opt/tsung-1.5.0/lib/tsung/bin'\
- >> /etc/profile.d/tsung.sh
-ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
- '/home/ec2-user/.tsung/log').start" &
-# All is well so signal success
-/opt/aws/bin/cfn-signal -e 0 --stack
-true || error_exit 'Error installing tsung'
-""",
-            'tsung_runtime': """export HOME=/home/ec2-user/
-ruby -e "require 'webrick'; WEBrick::HTTPServer.new(:DocumentRoot =>\
- '/home/ec2-user/.tsung/log').start" &
-""",
-            'memcached_configure_multi': """# Configure rails to use dalli
-sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
- :dalli_store, "{Memcached,PublicIp}"/' config/environments/production.rb
-""",
-            'memcached_configure_single': """# Configure rails to use dalli
-sed -i 's/# config.cache_store = :mem_cache_store/config.cache_store =\
- :dalli_store/' config/environments/production.rb
-""",
-            'memcached_install': """# Install dalli gem (for memcached)
-tmp="gem 'dalli'"; grep "^$tmp" Gemfile > /dev/null || echo $tmp >> Gemfile; \
-    unset tmp
-user_sudo bundle install || error_exit 'Failed to install dalli'
-""",
-            'ruby': """# Update alternatives
-alternatives --set ruby /usr/bin/ruby2.1 || error_exit 'Failed ruby2.1 default'
-# Install bundler only after the alternatives have been set.
-gem install bundle || error_exit 'Failed to install bundle'
-# Update user's path if it hasn't been set already
-echo "export PATH=/usr/local/bin:\$PATH" >> /home/ec2-user/.bashrc
-""",
-            'rails': """# Change to the app directory
-cd /home/ec2-user/app
-# Add environment variables to ec2-user's .bashrc
-export RAILS_ENV=production
-echo "export RAILS_ENV=production" >> ../.bashrc
-echo "export SECRET_KEY_BASE=b801783afb83bb8e614b32ccf6c05c855a927116d92062a75\
-c6ffa61d58c58e62f13eb60cf1a31922c44b7e6a3e8f1809934a93llask938bl" >> ../.bashrc
-
-# Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
-iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
-
-# Run the app specific ec2 initialization
-if [ -f .ec2_initialize ]; then
-    sudo -u ec2-user bash -l .ec2_initialize\
-     || error_exit 'Failed to run .ec2_initialize'
-fi
-
-# Add gems needed on production
-echo -e "\ngem 'therubyracer', platforms: :ruby " >> Gemfile
-echo -e "\ngem 'mysql2', '~> 0.3.13', platforms: :ruby " >> Gemfile
-echo -e "\ngem 'therubyrhino', platforms: :jruby " >> Gemfile
-echo -e "\ngem 'activerecord-jdbc-adapter', platforms: :jruby " >> Gemfile
-echo -e "\ngem 'multi_json'" >> Gemfile
-
-# Run the remaining commands as the ec2-user in the app directory
-user_sudo bundle install --without test development\
- || error_exit 'Failed to install bundle'
-# Create the database and run the migrations (try up to 10x)
-loop=10
-while [ $loop -gt 0 ]; do
-  user_sudo rake db:create db:migrate
-  if [ $? -eq 0 ]; then
-    loop=-1
-  else
-    sleep 6
-    loop=$(expr $loop - 1)
-  fi
-done
-if [ $loop -eq 0 ]; then
-  error_exit 'Failed to execute database migration'
-fi
-# Run the app specific ec2 initialization
-if [ -f .rails_initialize ]; then
-    sudo -u ec2-user bash -l .rails_initialize\
-     || error_exit 'Failed to run .rails_initialize'
-fi
-# Generate static assets
-user_sudo rake assets:precompile\
- || error_exit 'Failed to precompile static assets'
-""",
-            'passenger': """# Start passenger
-user_sudo passenger start -d --no-compile-runtime\
- || error_exit 'Failed to start passenger'
-""",
-            'puma': """# Configure the app to serve static assets
-echo -e "\ngem 'puma' " >> /home/ec2-user/app/Gemfile
-cd /home/ec2-user/app
-if [ '{RubyVM}' == 'JRuby' ]; then
-  gpg --keyserver hkp://keys.gnupg.net\
-   --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
-  curl -sSL https://get.rvm.io | bash -s stable
-  echo "source /home/ec2-user/.profile" >> /home/ec2-user/.bash_profile
-  source /home/ec2-user/.profile
-  rvm install jruby-1.7.19
-  rvm --default use jruby-1.7.19
-  sudo yum install mysql-connector-java
-  echo "\$CLASSPATH ||= [] " >> config/application.rb;
-  echo "\$CLASSPATH << '/usr/share/java/mysql-connector-java.jar'"\
-    >> config/application.rb;
-fi
-user_sudo "bundle install"
-user_sudo RAILS_SERVE_STATIC_FILES=true bundle exec puma\
- -t {ThreadParallelism} -w {ProcessParallelism} -p 3000 -d\
- || error_exit 'Failed to start rails server'
-""",
-            'passenger-install': """# Install Passenger
-gem install passenger rake || error_exit 'Failed to install passenger gems'
-# Build and install passenger
-user_sudo /usr/local/bin/passenger start --runtime-check-only\
- || error_exit 'Failed to build or install passenger'
-""",
-            'postamble': """# All is well so signal success
-/opt/aws/bin/cfn-signal -e 0 --stack {AWS::StackName} --resource %%RESOURCE%% \
-  --region {AWS::Region}
-"""}
     PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
@@ -610,6 +427,10 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
     def tsung_instance_filter(instances):
         """Filter out anything but m3 instance types."""
         return [x for x in instances if x.startswith('m3')]
+
+    @classmethod
+    def segment(cls, name):
+        return resource_stream(__name__, 'segments/{0}.sh'.format(name)).read()
 
     @classmethod
     def subnet_map(cls):
@@ -811,7 +632,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
                 sections = ['preamble', 'postamble']
                 userdata = self.join(*(
                     item for section in sections for item in self.join_format(
-                        self.INIT[section]
+                        self.segment(section)
                         .replace('%%RESOURCE%%', 'Memcached')
                         .replace('AppServer', 'Memcached'))))
                 ENABLE = {'enabled': True, 'ensureRunning': True}
@@ -893,7 +714,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         if puma:
             sections.append('puma')
         else:
-            sections.append('passenger-install')
+            sections.append('passenger_install')
             sections.append('passenger')
         sections.append('postamble')
 
@@ -913,7 +734,7 @@ user_sudo /usr/local/bin/passenger start --runtime-check-only\
         """
         userdata = self.join(*(
             item for section in sections for item in self.join_format(
-                self.INIT[section].replace('%%RESOURCE%%', resource))))
+                self.segment(section).replace('%%RESOURCE%%', resource))))
 
         self.template['Resources']['AppServer'] = {
             'Metadata': {'AWS::CloudFormation::Init': {

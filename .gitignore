@@ -2,4 +2,6 @@
 *.pem
 *.pyc
 *.txt
+build/
 conf/
+dist/

@@ -2,13 +2,15 @@ import os
 import re
 from setuptools import setup
 
-MODULE_NAME = 'scalable_admin'
+PACKAGE_NAME = 'scalable_admin'
 
-README = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
-VERSION = re.search("__version__ = '([^']+)'",
-                    open('{0}.py'.format(MODULE_NAME)).read()).group(1)
+HERE = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(HERE, 'README.md')) as fp:
+    README = fp.read()
+with open(os.path.join(HERE, PACKAGE_NAME, '__init__.py')) as fp:
+    VERSION = re.search("__version__ = '([^']+)'", fp.read()).group(1)
 
-setup(name=MODULE_NAME,
+setup(name=PACKAGE_NAME,
       author='Bryce Boe',
       author_email='bbzbryce@gmail.com',
       classifiers=['Intended Audience :: Developers',
@@ -18,7 +20,8 @@ setup(name=MODULE_NAME,
       description=('A command line tool to facilitate the administration of '
                    'the scalable Internet services course taught at UCSB and '
                    'UCLA.'),
-      entry_points={'console_scripts': ['{0} = {0}:main'.format(MODULE_NAME)]},
+      entry_points={'console_scripts':
+                    ['{0} = {0}:main'.format(PACKAGE_NAME)]},
       install_requires=['botocore >=1.2.10, <1.3',
                         'docopt >=0.6.2, <1',
                         'github3.py >=1.0.0a2, <1.0.1'],
@@ -26,6 +29,7 @@ setup(name=MODULE_NAME,
                 'github'],
       license='Simplified BSD License',
       long_description=README,
-      py_modules=[MODULE_NAME],
+      packages=[PACKAGE_NAME],
+      package_data={PACKAGE_NAME: ['segments/*.sh']},
       url = 'https://github.com/scalableinternetservices/utils',
       version=VERSION)
