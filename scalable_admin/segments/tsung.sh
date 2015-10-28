@@ -17,6 +17,9 @@ sysctl -p
 # Change to the app directory
 cd /home/ec2-user/
 
+# Fetch tsung example
+wget https://raw.githubusercontent.com/scalableinternetservices/demo/master/load_tests/simple.xml
+
 # Build Tsung
 user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.6.0.tar.gz || error_exit 'Failed to download tsung.'
 user_sudo tar -xvzf tsung-1.6.0.tar.gz || error_exit 'Failed to extract tsung'
@@ -29,12 +32,5 @@ make install || error_exit 'Failed to install tsung'
 cd ..
 user_sudo rm -rf tsung-1.6.0*
 
-# Redirect port 80 to port 3000 (ec2-user cannot bind port 80)
-iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
-
-# Create tsung log directory (for webserver)
-user_sudo mkdir -p .tsung/log || error_exit 'Failed to create tsung log directory'
-
-# Start simple HTTP Server for Results
-cd .tsung/log
-user_sudo python -m SimpleHTTPServer 3000&
+# Redirect port 80 to port 8091 (tsung server port)
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8091

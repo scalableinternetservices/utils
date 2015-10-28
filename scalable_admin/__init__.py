@@ -372,7 +372,8 @@ class CFTemplate(object):
                               'openssl-devel', 'pcre-devel', 'ruby21-devel'},
                 'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
                           'ruby21-devel'},
-                'tsung': {'autoconf', 'erlang', 'gcc-c++'}}
+                'tsung': {'autoconf', 'erlang', 'gcc-c++', 'gnuplot',
+                          'perl-Template-Toolkit', 'python27-matplotlib'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
