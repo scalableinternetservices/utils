@@ -127,7 +127,7 @@ class AWS(object):
         for stack in self.op(cf.list_stacks, False)['StackSummaries']:
             if stack['StackStatus'] in {'DELETE_COMPLETE'}:
                 continue
-            if now - stack['CreationTime'] > timedelta(hours=8):
+            if now - stack['CreationTime'] > timedelta(minutes=290):
                 self.op(cf.delete_stack, StackName=stack['StackName'])
 
     def configure(self, team):
