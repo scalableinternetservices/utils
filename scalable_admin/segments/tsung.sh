@@ -24,13 +24,16 @@ user_sudo wget https://raw.githubusercontent.com/scalableinternetservices/demo/m
 user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.6.0.tar.gz || error_exit 'Failed to download tsung.'
 user_sudo tar -xvzf tsung-1.6.0.tar.gz || error_exit 'Failed to extract tsung'
 cd tsung-1.6.0
-user_sudo ./configure  || error_exit 'Failed to configure tsung'
+user_sudo ./configure || error_exit 'Failed to configure tsung'
 user_sudo make || error_exit 'Failed to make tsung'
 make install || error_exit 'Failed to install tsung'
 
 # Clean up
 cd ..
 user_sudo rm -rf tsung-1.6.0*
+
+# Set environment variable
+echo "export PATH=/usr/lib/tsung/bin:\$PATH" >> /home/ec2-user/.bashrc
 
 # Redirect port 80 to port 8091 (tsung server port)
 iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8091
