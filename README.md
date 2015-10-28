@@ -210,15 +210,7 @@ the same EC2 instance with the app server and database.
 Generate a cloudformation template to generate stacks that run the load testing
 tool funkload. The `--no-test` flag works as described above.
 
-### scalable_admin cftemplate tsung-ami
-
-Generate a cloudformation template useful to build a tsung ami. This template
-specifies an EC2 instance that already has the tsung environment created on
-launch, and cleans up the environment so that an AMI can be immediately
-generated following this document:
-http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-instance-store.html
-
-### scalable_admin cftemplate-update-all [--no-test] [--passenger-ami=ami]
+### scalable_admin cftemplate-update-all [--no-test]
 
 Update all permutations of the application server stacks (not tsung). This is
 useful to quickly change the allowable instance types, or to make any changes

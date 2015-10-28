@@ -10,7 +10,7 @@ iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
 
 # Run the app specific ec2 initialization
 if [ -f .ec2_initialize ]; then
-    sudo -u ec2-user bash -l .ec2_initialize     || error_exit 'Failed to run .ec2_initialize'
+    sudo -u ec2-user bash -l .ec2_initialize || error_exit 'Failed to run .ec2_initialize'
 fi
 
 # Add gems needed on production
@@ -43,7 +43,7 @@ if [ $loop -eq 0 ]; then
 fi
 # Run the app specific ec2 initialization
 if [ -f .rails_initialize ]; then
-    sudo -u ec2-user bash -l .rails_initialize     || error_exit 'Failed to run .rails_initialize'
+    sudo -u ec2-user bash -l .rails_initialize || error_exit 'Failed to run .rails_initialize'
 fi
 # Generate static assets
 user_sudo rake assets:precompile || error_exit 'Failed to precompile static assets'
