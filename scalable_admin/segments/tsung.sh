@@ -18,9 +18,9 @@ sysctl -p
 cd /home/ec2-user/
 
 # Fetch tsung example
-wget https://raw.githubusercontent.com/scalableinternetservices/demo/master/load_tests/simple.xml
+user_sudo wget https://raw.githubusercontent.com/scalableinternetservices/demo/master/load_tests/simple.xml
 
-# Build Tsung
+# Install Tsung
 user_sudo wget http://tsung.erlang-projects.org/dist/tsung-1.6.0.tar.gz || error_exit 'Failed to download tsung.'
 user_sudo tar -xvzf tsung-1.6.0.tar.gz || error_exit 'Failed to extract tsung'
 cd tsung-1.6.0
