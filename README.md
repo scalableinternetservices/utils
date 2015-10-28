@@ -51,8 +51,7 @@ configured to work as described above for its corresponding type.
   This instance provides an installed version of Tsung at your disposal. You
   will need to copy/rsync over your tsung xml tests.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/Tsung.json
-
-
+    * (UCSB) https://cs290b.s3.amazonaws.com/Tsung.json
 
 ## Running your own instance configuration
 
