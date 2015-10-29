@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """Scalable Internet Services administrative utility.
 
 Usage:
@@ -996,7 +994,3 @@ def main():
                                      user_names=args['USER'])
     else:
         raise Exception('Invalid state')
-
-
-if __name__ == '__main__':
-    sys.exit(main())
