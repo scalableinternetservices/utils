@@ -1,21 +1,7 @@
-"""Scalable Internet Services administrative utility.
-
-Usage:
-  scalable_admin aws TEAM...
-  scalable_admin aws-cleanup
-  scalable_admin aws-purge TEAM...
-  scalable_admin aws-update-all
-  scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
-  scalable_admin cftemplate tsung [--no-test]
-  scalable_admin cftemplate-update-all [--no-test]
-  scalable_admin gh TEAM USER...
-
--h --help  show this message
-"""  # NOQA
+"""Scalable Admin is a helps administrate teams' access to github and aws."""
 
 from __future__ import print_function
 from datetime import datetime, timedelta, tzinfo
-from docopt import docopt
 from pkg_resources import resource_stream
 from pprint import pprint
 from string import Formatter
@@ -362,6 +348,7 @@ class AWS(object):
 
 class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
+
     DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
                                   'instance': 'ami-65116700'},
                     'us-west-2': {'ebs': 'ami-9ff7e8af',
@@ -426,6 +413,7 @@ class CFTemplate(object):
 
     @classmethod
     def segment(cls, name):
+        """Return the contents of the segment named `name`.sh."""
         return resource_stream(__name__, 'segments/{0}.sh'.format(name)).read()
 
     @classmethod
@@ -931,66 +919,3 @@ def github_authenticate_and_fetch_org():
                 raise
             print('{0}. Try again.'.format(exc.message))
             os.unlink(os.path.expanduser('~/.config/github_creds'))
-
-
-def main():
-    """Enter admin.py."""
-    args = docopt(__doc__)
-
-    parse_config()
-
-    # Replace spaces with hyphens in team names
-    if args['TEAM']:
-        if isinstance(args['TEAM'], list):
-            for i, item in enumerate(args['TEAM']):
-                args['TEAM'][i] = item.strip().replace(' ', '-')
-        else:
-            args['TEAM'] = args['TEAM'].strip().replace(' ', '-')
-
-    if args['aws']:
-        for team in args['TEAM']:
-            retval = AWS().configure(team)
-            if retval:
-                return retval
-        return 0
-    elif args['aws-cleanup']:
-        return AWS().cleanup()
-    elif args['aws-purge']:
-        for team in args['TEAM']:
-            retval = AWS().purge(team)
-            if retval:
-                return retval
-    elif args['aws-update-all']:
-        aws = AWS()
-        for team in aws.team_to_security_group():
-            retval = aws.configure(team)
-            if retval:
-                return retval
-        return 0
-    elif args['cftemplate']:
-        cf = CFTemplate(test=not args['--no-test'])
-        if args['tsung']:
-            return cf.generate_tsung()
-        else:
-            return cf.generate_stack(app_ami=args['--ami'],
-                                     memcached=args['--memcached'],
-                                     multi=args['--multi'],
-                                     puma=args['--puma'])
-    elif args['cftemplate-update-all']:
-        bit_pos = ['memcached', 'puma', 'multi']
-        for i in range(2 ** len(bit_pos)):
-            kwargs = {'app_ami': None}
-            for bit, argument in enumerate(bit_pos):
-                kwargs[argument] = bool(i & 2 ** bit)
-            cf = CFTemplate(test=not args['--no-test'])
-            retval = cf.generate_stack(**kwargs)
-            if retval:
-                return retval
-        return 0
-    elif args['gh']:
-        team = args['TEAM']
-        team = team[0] if isinstance(team, list) else team
-        return configure_github_team(team_name=team,
-                                     user_names=args['USER'])
-    else:
-        raise Exception('Invalid state')
