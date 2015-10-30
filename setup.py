@@ -22,7 +22,7 @@ setup(name=PACKAGE_NAME,
                    'UCLA.'),
       entry_points={'console_scripts':
                     ['{0} = {0}:main'.format(PACKAGE_NAME)]},
-      install_requires=['botocore >=1.2.10, <1.3',
+      install_requires=['botocore >=1.2, <1.4',
                         'docopt >=0.6.2, <1',
                         'github3.py >=1.0.0a2, <1.0.1'],
       keywords=['course administration', 'cloud formation templates', 'aws',
