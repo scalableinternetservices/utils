@@ -21,8 +21,6 @@ from .const import (AWS_CREDENTIAL_PROFILE, EC2_INSTANCE_TYPES, IAM_GROUP_NAME,
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
-    # The first instance listed will be the default.
-
     @staticmethod
     def op(method, debug_output=True, **kwargs):
         """Execute an AWS operation and check the response status."""
@@ -339,6 +337,7 @@ class AWS(object):
 class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
 
+    ENABLE_PARAM = {'enabled': True, 'ensureRunning': True}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -366,10 +365,10 @@ class CFTemplate(object):
         return {'Fn::Join': ['', args]}
 
     @staticmethod
-    def join_format(string):
+    def join_format(format_string):
         """Convert formatted strings into the cloudformation join format."""
         retval = []
-        for item in Formatter().parse(string):
+        for item in Formatter().parse(format_string):
             if item[0]:
                 retval.append(item[0])
             if item[1]:
@@ -408,7 +407,7 @@ class CFTemplate(object):
 
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = None
+        self.ami = self.memcached = self.multi = self.name = self.puma = None
         self.create_timeout = 'PT10M'
         self.template = copy.deepcopy(self.TEMPLATE)
         self.test = test
@@ -419,6 +418,7 @@ class CFTemplate(object):
     def ami_map(self):
         """Return a mapping of instance type to their AMI."""
         def ami_type(instance_type):
+            """Return the AMI for a particular instance type."""
             return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
         return {x: {'ami': REGION_AMIS[AWS.region][ami_type(x)]} for x in
@@ -447,10 +447,9 @@ class CFTemplate(object):
             'https://github.com/{0}/'.format(GH_ORGANIZATION),
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
-            ENABLE = {'enabled': True, 'ensureRunning': True}
-            app['services'] = {'sysvinit': {'mysqld': ENABLE}}
+            app['services'] = {'sysvinit': {'mysqld': self.ENABLE_PARAM}}
             if self.memcached:
-                app['services']['sysvinit']['memcached'] = ENABLE
+                app['services']['sysvinit']['memcached'] = self.ENABLE_PARAM
         perms = {'commands': {'update_permissions':
                               {'command': 'chown -R ec2-user:ec2-user .',
                                'cwd': '/home/ec2-user/'}}}
@@ -591,13 +590,13 @@ class CFTemplate(object):
                         self.segment(section)
                         .replace('%%RESOURCE%%', 'Memcached')
                         .replace('AppServer', 'Memcached'))))
-                ENABLE = {'enabled': True, 'ensureRunning': True}
                 self.template['Resources']['Memcached'] = {
                     'CreationPolicy': {'ResourceSignal': {'Timeout': 'PT5M'}},
                     'Metadata': {'AWS::CloudFormation::Init': {
                         'config': {
                             'packages': {'yum': {'memcached': []}},
-                            'services': {'sysvinit': {'memcached': ENABLE}}}}},
+                            'services': {'sysvinit':
+                                         {'memcached': self.ENABLE_PARAM}}}}},
                     'Properties': {
                         'IamInstanceProfile': self.get_ref('TeamName'),
                         'ImageId': self.get_map(
@@ -808,11 +807,11 @@ def configure_github_team(team_name, user_names):
 
 def generate_password(length=16):
     """Generate password containing both cases of letters and digits."""
-    ALPHA = string.ascii_letters + string.digits
+    characters = string.ascii_letters + string.digits
     selection = '0'
     while selection.isalpha() or selection.isdigit() or selection.isupper()\
             or selection.islower():
-        selection = ''.join(random.choice(ALPHA) for _ in range(length))
+        selection = ''.join(random.choice(characters) for _ in range(length))
     return selection
 
 
@@ -854,6 +853,7 @@ def get_github_token():
     from getpass import getpass
 
     def two_factor_callback():
+        """Obtain input for 2FA token."""
         sys.stdout.write('Two factor token: ')
         sys.stdout.flush()
         return sys.stdin.readline().strip()
@@ -891,9 +891,9 @@ def github_authenticate_and_fetch_org():
 
     while True:
         gh_token, _ = get_github_token()
-        gh = login(token=gh_token)
+        github = login(token=gh_token)
         try:  # Test login
-            return gh.membership_in(GH_ORGANIZATION).organization
+            return github.membership_in(GH_ORGANIZATION).organization
         except GitHubError as exc:
             if exc.code != 401:  # Bad Credentials
                 raise
