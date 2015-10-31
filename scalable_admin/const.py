@@ -12,6 +12,20 @@ EC2_INSTANCE_TYPES = ['t2.micro',
 RDB_INSTANCE_TYPES = ['db.{0}'.format(x) for x in EC2_INSTANCE_TYPES
                       if x != 't2.micro']
 
+# These are set to the us-east price value.
+EC2_MAX_SPOT_PRICES = {
+    'm3.medium':  '0.06',
+    'm3.large':   '0.13',
+    'm3.xlarge':  '0.26',
+    'm3.2xlarge': '0.53',
+    'c3.large':   '0.10',
+    'c3.xlarge':  '0.21',
+    'c3.2xlarge': '0.42',
+    'c3.4xlarge': '0.84',
+    'r3.large',:  '0.17',
+    'r3.xlarge':  '0.35',
+    'r3.2xlarge'  '0.70'}
+
 REGION_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
                              'instance': 'ami-65116700'},
                'us-west-2': {'ebs': 'ami-9ff7e8af',
