@@ -21,7 +21,7 @@ setup(name=PACKAGE_NAME,
                    'the scalable Internet services course taught at UCSB and '
                    'UCLA.'),
       entry_points={'console_scripts':
-                    ['{0} = {0}:main'.format(PACKAGE_NAME)]},
+                    ['{0}={0}.command_line:main'.format(PACKAGE_NAME)]},
       install_requires=['botocore >=1.2, <1.4',
                         'docopt >=0.6.2, <1',
                         'github3.py >=1.0.0a2, <1.0.1'],

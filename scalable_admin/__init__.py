@@ -1,52 +1,22 @@
-"""Scalable Internet Services administrative utility.
-
-Usage:
-  scalable_admin aws TEAM...
-  scalable_admin aws-cleanup
-  scalable_admin aws-purge TEAM...
-  scalable_admin aws-update-all
-  scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
-  scalable_admin cftemplate tsung [--no-test]
-  scalable_admin cftemplate-update-all [--no-test]
-  scalable_admin gh TEAM USER...
-
--h --help  show this message
-"""  # NOQA
+"""Scalable Admin is a helps administrate teams' access to github and aws."""
 
 from __future__ import print_function
-from datetime import datetime, timedelta, tzinfo
-from docopt import docopt
+from copy import deepcopy
+from datetime import datetime, timedelta
 from pkg_resources import resource_stream
+from os import chmod
 from pprint import pprint
 from string import Formatter
+from sys import stderr
 import botocore.exceptions
 import botocore.session
-import copy
 import json
-import os
-import random
-import string
-import sys
-
-
-__version__ = '0.1'
-
-# The following globals are set in `parse_config`
-GH_ORGANIZATION = S3_BUCKET = None
+from . import const
+from .helper import (UTC, generate_password)
 
 
 class AWS(object):
     """This class handles AWS administrative tasks."""
-
-    # The first instance listed will be the default.
-    EC2_INSTANCES = ['t2.micro',
-                     'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                     'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
-                     'r3.large', 'r3.xlarge', 'r3.2xlarge']
-    RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES
-                     if x != 't2.micro']
-    GROUP = 'scalableinternetservices'
-    PROFILE = 'admin'
 
     @staticmethod
     def op(method, debug_output=True, **kwargs):
@@ -54,26 +24,25 @@ class AWS(object):
         try:
             response = method(**kwargs)
         except botocore.exceptions.ClientError as exc:
-            sys.stderr.write(exc.message)
-            sys.stderr.write('\n')
+            stderr.write(exc.message)
+            stderr.write('\n')
             return False
         except:
             raise
         if debug_output:
-            sys.stderr.write('Success: {0} {1}\n'
-                             .format(method.__name__, kwargs))
+            stderr.write('Success: {0} {1}\n'.format(method.__name__, kwargs))
         return response
 
     @staticmethod
     def operation_list(service_name):
         """Output the available API commands and exit."""
         pprint(service_name[0].operations)
-        sys.exit(1)
+        exit(1)
 
     @classmethod
     def set_class_variables(cls, region):
         """Set class-based variables that depend on the passed in region."""
-        cls.region = 'us-east-1'
+        cls.region = region
         cls.arncf = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(cls.region)
         cls.arnec2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(cls.region)
         cls.arnelb = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
@@ -105,7 +74,8 @@ class AWS(object):
 
     def __init__(self):
         """Initialize the AWS class."""
-        self.aws = botocore.session.Session(profile=self.PROFILE)
+        self.aws = botocore.session.Session(
+            profile=const.AWS_CREDENTIAL_PROFILE)
         self.ec2 = self.aws.create_client('ec2', self.region)
         self.iam = self.aws.create_client('iam', None)
         self.rds = self.aws.create_client('rds', self.region)
@@ -120,13 +90,13 @@ class AWS(object):
 
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
-        cf = self.aws.create_client('cloudformation', self.region)
+        cloud = self.aws.create_client('cloudformation', self.region)
         now = datetime.now(UTC())
-        for stack in self.op(cf.list_stacks, False)['StackSummaries']:
+        for stack in self.op(cloud.list_stacks, False)['StackSummaries']:
             if stack['StackStatus'] in {'DELETE_COMPLETE'}:
                 continue
             if now - stack['CreationTime'] > timedelta(minutes=290):
-                self.op(cf.delete_stack, StackName=stack['StackName'])
+                self.op(cloud.delete_stack, StackName=stack['StackName'])
 
     def configure(self, team):
         """Create account and configure settings for a team.
@@ -135,10 +105,11 @@ class AWS(object):
         """
         s3_statement = [
             {'Action': '*', 'Effect': 'Allow',
-             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
+             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(
+                 const.S3_BUCKET, team)},
             {'Action': 's3:ListBucket', 'Effect': 'Allow',
              'Condition': {'StringLike': {'s3:prefix': '{0}/*'.format(team)}},
-             'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}]
+             'Resource': 'arn:aws:s3:::{0}'.format(const.S3_BUCKET)}]
 
         # Create IAM role (permits S3 access from associated EC2 instances)
         role_policy = {'Statement': {
@@ -154,9 +125,10 @@ class AWS(object):
                 PolicyDocument=json.dumps({'Statement': s3_statement}))
 
         # Create IAM group if it does not exist
-        self.op(self.iam.create_group, GroupName=self.GROUP)
-        self.op(self.iam.put_group_policy, GroupName=self.GROUP,
-                PolicyName=self.GROUP, PolicyDocument=json.dumps(self.policy))
+        self.op(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
+        self.op(self.iam.put_group_policy, GroupName=const.IAM_GROUP_NAME,
+                PolicyName=const.IAM_GROUP_NAME,
+                PolicyDocument=json.dumps(self.policy))
 
         # Configure user account / password / access keys / keypair
         if self.op(self.iam.create_user, UserName=team):
@@ -180,10 +152,10 @@ class AWS(object):
             if data:
                 filename = '{0}.pem'.format(team)
                 with open(filename, 'w') as fd:
-                    os.chmod(filename, 0o600)
+                    chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
-        self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
+        self.op(self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME,
                 UserName=team)
 
         # Configure security groups
@@ -267,7 +239,7 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Condition': {
-                 'StringLike': {'ec2:InstanceType': self.EC2_INSTANCES}},
+                 'StringLike': {'ec2:InstanceType': const.EC2_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': AWS.arnec2.format('instance/*')})
         # Filter the RDS instance types that are allowed to be started
@@ -277,7 +249,8 @@ class AWS(object):
                  'Bool': {'rds:MultiAz': 'false'},
                  'NumericEquals': {'rds:Piops': '0', 'rds:StorageSize': '5'},
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
-                 'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
+                 'StringLike': {
+                     'rds:DatabaseClass': const.RDB_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': [AWS.arnrds.format('{0}*'.format(team).lower()),
                           AWS.arnrdssub.format('{0}'.format(team).lower())]})
@@ -286,7 +259,7 @@ class AWS(object):
         self.op(self.iam.create_group, GroupName=team)
         self.op(self.iam.put_group_policy, GroupName=team, PolicyName=team,
                 PolicyDocument=json.dumps(policy))
-        self.op(self.iam.add_user_to_group, GroupName=team,  UserName=team)
+        self.op(self.iam.add_user_to_group, GroupName=team, UserName=team)
         return 0
 
     def team_to_security_group(self):
@@ -344,8 +317,8 @@ class AWS(object):
             in S3 will be returned. Note that this URL is not publicly
             accessible, but it will work for CloudFormation Stack generation.
         """
-        cf = self.aws.create_client('cloudformation', self.region)
-        valid = bool(self.op(cf.validate_template, TemplateBody=template,
+        cloud = self.aws.create_client('cloudformation', self.region)
+        valid = bool(self.op(cloud.validate_template, TemplateBody=template,
                              debug_output=False))
         if not valid or upload is None:
             return valid
@@ -362,16 +335,8 @@ class AWS(object):
 
 class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
-    DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
-                                  'instance': 'ami-65116700'},
-                    'us-west-2': {'ebs': 'ami-9ff7e8af',
-                                  'instance': 'ami-bbf7e88b'}}
-    PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
-                              'openssl-devel', 'pcre-devel', 'ruby21-devel'},
-                'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
-                          'ruby21-devel'},
-                'tsung': {'autoconf', 'erlang', 'gcc-c++', 'gnuplot',
-                          'perl-Template-Toolkit', 'python27-matplotlib'}}
+
+    ENABLE_PARAM = {'enabled': True, 'ensureRunning': True}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -399,10 +364,10 @@ class CFTemplate(object):
         return {'Fn::Join': ['', args]}
 
     @staticmethod
-    def join_format(string):
+    def join_format(format_string):
         """Convert formatted strings into the cloudformation join format."""
         retval = []
-        for item in Formatter().parse(string):
+        for item in Formatter().parse(format_string):
             if item[0]:
                 retval.append(item[0])
             if item[1]:
@@ -426,6 +391,7 @@ class CFTemplate(object):
 
     @classmethod
     def segment(cls, name):
+        """Return the contents of the segment named `name`.sh."""
         return resource_stream(__name__, 'segments/{0}.sh'.format(name)).read()
 
     @classmethod
@@ -440,9 +406,9 @@ class CFTemplate(object):
 
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = None
+        self.ami = self.memcached = self.multi = self.name = self.puma = None
         self.create_timeout = 'PT10M'
-        self.template = copy.deepcopy(self.TEMPLATE)
+        self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
         self._team_map = None
@@ -451,10 +417,11 @@ class CFTemplate(object):
     def ami_map(self):
         """Return a mapping of instance type to their AMI."""
         def ami_type(instance_type):
+            """Return the AMI for a particular instance type."""
             return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
-        return {x: {'ami': self.DEFAULT_AMIS[AWS.region][ami_type(x)]} for x in
-                AWS.EC2_INSTANCES}
+        return {x: {'ami': const.REGION_AMIS[AWS.region][ami_type(x)]} for x in
+                const.EC2_INSTANCE_TYPES}
 
     @property
     def default_subnet(self):
@@ -476,13 +443,12 @@ class CFTemplate(object):
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
-            'https://github.com/{0}/'.format(GH_ORGANIZATION),
+            'https://github.com/{0}/'.format(const.GH_ORGANIZATION),
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
-            ENABLE = {'enabled': True, 'ensureRunning': True}
-            app['services'] = {'sysvinit': {'mysqld': ENABLE}}
+            app['services'] = {'sysvinit': {'mysqld': self.ENABLE_PARAM}}
             if self.memcached:
-                app['services']['sysvinit']['memcached'] = ENABLE
+                app['services']['sysvinit']['memcached'] = self.ENABLE_PARAM
         perms = {'commands': {'update_permissions':
                               {'command': 'chown -R ec2-user:ec2-user .',
                                'cwd': '/home/ec2-user/'}}}
@@ -537,9 +503,9 @@ class CFTemplate(object):
     def add_ssh_output(self, resource_name='AppServer'):
         """Output the SSH connection string."""
         self.add_output('SSH', '{0} SSH connect string'.format(resource_name),
-                        self.join(
-            'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att(resource_name, 'PublicIp')))
+                        self.join('ssh -i ', self.get_ref('TeamName'),
+                                  '.pem ec2-user@',
+                                  self.get_att(resource_name, 'PublicIp')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
@@ -563,14 +529,15 @@ class CFTemplate(object):
                                             ' worker processes.'))
 
         if self.multi:
-            instances = self.multi_instance_filter(AWS.EC2_INSTANCES)
+            instances = self.multi_instance_filter(const.EC2_INSTANCE_TYPES)
             url = self.get_att('LoadBalancer', 'DNSName')
             self.add_parameter('AppInstances', 'Number', default=2,
                                description=('The number of AppServer instances'
                                             ' to launch.'),
                                maxv=8, minv=1)
-            self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
-                               default=AWS.RDB_INSTANCES[0],
+            self.add_parameter('DBInstanceType',
+                               allowed=const.RDB_INSTANCE_TYPES,
+                               default=const.RDB_INSTANCE_TYPES[0],
                                description='The Database instance type.')
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
@@ -623,13 +590,13 @@ class CFTemplate(object):
                         self.segment(section)
                         .replace('%%RESOURCE%%', 'Memcached')
                         .replace('AppServer', 'Memcached'))))
-                ENABLE = {'enabled': True, 'ensureRunning': True}
                 self.template['Resources']['Memcached'] = {
                     'CreationPolicy': {'ResourceSignal': {'Timeout': 'PT5M'}},
                     'Metadata': {'AWS::CloudFormation::Init': {
                         'config': {
                             'packages': {'yum': {'memcached': []}},
-                            'services': {'sysvinit': {'memcached': ENABLE}}}}},
+                            'services': {'sysvinit':
+                                         {'memcached': self.ENABLE_PARAM}}}}},
                     'Properties': {
                         'IamInstanceProfile': self.get_ref('TeamName'),
                         'ImageId': self.get_map(
@@ -671,13 +638,13 @@ class CFTemplate(object):
         self.memcached = memcached
         self.multi = multi
         self.puma = puma
-        self.yum_packages = self.PACKAGES['stack']
+        self.yum_packages = const.SERVER_YUM_PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
             if memcached:
                 self.yum_packages.add('memcached')
         if not (puma or app_ami):
-            self.yum_packages |= self.PACKAGES['passenger']
+            self.yum_packages |= const.SERVER_YUM_PACKAGES['passenger']
 
         name_parts = []
         # Identify stack plurality
@@ -737,9 +704,9 @@ class CFTemplate(object):
             'Type': 'AWS::EC2::Instance'}
 
         if instance_filter:
-            instances = instance_filter(AWS.EC2_INSTANCES)
+            instances = instance_filter(const.EC2_INSTANCE_TYPES)
         else:
-            instances = AWS.EC2_INSTANCES
+            instances = const.EC2_INSTANCE_TYPES
         self.add_parameter('AppInstanceType', allowed=instances,
                            default=instances[0],
                            description='The AppServer instance type.')
@@ -758,7 +725,8 @@ class CFTemplate(object):
                               sort_keys=True)
         if self.test:
             self.name += 'Test'
-        tmp = AWS().verify_template(template, (S3_BUCKET, self.name + '.json'))
+        tmp = AWS().verify_template(template,
+                                    (const.S3_BUCKET, self.name + '.json'))
         if tmp:
             if isinstance(self, bool):
                 print(template)
@@ -772,7 +740,7 @@ class CFTemplate(object):
         """Output the cloudformation template for a Tsung instance."""
         sections = ['preamble', 'tsung', 'postamble']
         self.name = 'Tsung'
-        self.yum_packages = self.PACKAGES['tsung']
+        self.yum_packages = const.SERVER_YUM_PACKAGES['tsung']
         self.add_ssh_output()
         url = self.get_att('AppServer', 'PublicIp')
         self.add_output('URL', 'The URL to the rails application.',
@@ -781,216 +749,3 @@ class CFTemplate(object):
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server,
                                       self.tsung_instance_filter)
-
-
-class UTC(tzinfo):
-    """Specify the UTC timezone.
-
-    From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
-    """
-
-    dst = lambda x, y: timedelta(0)
-    tzname = lambda x, y: 'UTC'
-    utcoffset = lambda x, y: timedelta(0)
-
-
-def configure_github_team(team_name, user_names):
-    """Create team and team repository and add users to the team on Github."""
-    print("""About to create:
-     Team: {0}
-     Members: {1}\n""".format(team_name, ', '.join(user_names)))
-    sys.stdout.write('Do you want to continue? [yN]: ')
-    sys.stdout.flush()
-    if sys.stdin.readline().strip().lower() not in ['y', 'yes', '1']:
-        print('Aborting')
-        return 1
-
-    org = github_authenticate_and_fetch_org()
-
-    team = None  # Fetch or create team
-    for iteam in org.teams():
-        if iteam.name == team_name:
-            team = iteam
-            break
-    if team is None:
-        team = org.create_team(team_name, permission='admin')
-
-    repo = None  # Fetch or create repository
-    for irepo in org.repositories('public'):
-        if irepo.name == team_name:
-            repo = irepo
-            break
-    if repo is None:  # Create repo and associate with the team
-        repo = org.create_repository(team_name, has_wiki=False,
-                                     team_id=team.id)
-    elif team not in list(repo.teams()):
-        print(org.add_repo(repo, team))
-
-    # Add PT integration hook
-    pt_token = get_pivotaltracker_token()
-    if pt_token:
-        if not repo.create_hook('pivotaltracker', {'token': pt_token}):
-            print('Failed to add PT hook.')
-
-    for user in user_names:  # Add users to the team
-        print(team.invite(user))
-
-    return 0
-
-
-def generate_password(length=16):
-    """Generate password containing both cases of letters and digits."""
-    ALPHA = string.ascii_letters + string.digits
-    selection = '0'
-    while selection.isalpha() or selection.isdigit() or selection.isupper()\
-            or selection.islower():
-        selection = ''.join(random.choice(ALPHA) for _ in range(length))
-    return selection
-
-
-def parse_config():
-    """Parse the configuation file and set the necessary state."""
-    global GH_ORGANIZATION, S3_BUCKET
-    config_path = os.path.expanduser('~/.config/scalable_admin.json')
-    if not os.path.isfile(config_path):
-        sys.stderr.write('{0} does not exist.\n'.format(config_path))
-        sys.exit(1)
-
-    with open(config_path) as fp:
-        config = json.load(fp)
-
-    error = False
-    for key in ['aws_region', 'github_organization', 's3_bucket']:
-        if key not in config:
-            sys.stderr.write('The key {0} does not exist in {1}\n'.format(
-                key, config_path))
-            error = True
-    if error:
-        sys.exit(1)
-
-    AWS.set_class_variables(config['aws_region'])
-    GH_ORGANIZATION = config['github_organization']
-    S3_BUCKET = config['s3_bucket']
-
-
-def get_github_token():
-    """Fetch and/or load API authorization token for Github."""
-    credential_file = os.path.expanduser('~/.config/scalable_github_creds')
-    if os.path.isfile(credential_file):
-        with open(credential_file) as fd:
-            token = fd.readline().strip()
-            auth_id = fd.readline().strip()
-            return token, auth_id
-
-    from github3 import authorize
-    from getpass import getpass
-
-    def two_factor_callback():
-        sys.stdout.write('Two factor token: ')
-        sys.stdout.flush()
-        return sys.stdin.readline().strip()
-
-    user = raw_input("Github admin username: ")
-    auth = authorize(user, getpass('Password for {0}: '.format(user)),
-                     ['public_repo', 'admin:org'],
-                     'Scalable Internet Services Create Repo Script {0}'
-                     .format(random.randint(100, 999)), 'http://example.com',
-                     two_factor_callback=two_factor_callback)
-
-    with open(credential_file, 'w') as fd:
-        fd.write('{0}\n{1}\n'.format(auth.token, auth.id))
-    return auth.token, auth.id
-
-
-def get_pivotaltracker_token():
-    """Return PivotalTracker API token if it exists."""
-    token_file = os.path.expanduser('~/.config/pivotaltracker_token')
-    if os.path.isfile(token_file):
-        with open(token_file) as fd:
-            token = fd.readline().strip()
-    else:
-        from getpass import getpass
-        token = getpass('PivotalTracker API token: ').strip()
-        if token:
-            with open(token_file, 'w') as fd:
-                fd.write('{0}\n'.format(token))
-    return token if token else None
-
-
-def github_authenticate_and_fetch_org():
-    """Authenticate to github and return the desired organization handle."""
-    from github3 import GitHubError, login
-
-    while True:
-        gh_token, _ = get_github_token()
-        gh = login(token=gh_token)
-        try:  # Test login
-            return gh.membership_in(GH_ORGANIZATION).organization
-        except GitHubError as exc:
-            if exc.code != 401:  # Bad Credentials
-                raise
-            print('{0}. Try again.'.format(exc.message))
-            os.unlink(os.path.expanduser('~/.config/github_creds'))
-
-
-def main():
-    """Enter admin.py."""
-    args = docopt(__doc__)
-
-    parse_config()
-
-    # Replace spaces with hyphens in team names
-    if args['TEAM']:
-        if isinstance(args['TEAM'], list):
-            for i, item in enumerate(args['TEAM']):
-                args['TEAM'][i] = item.strip().replace(' ', '-')
-        else:
-            args['TEAM'] = args['TEAM'].strip().replace(' ', '-')
-
-    if args['aws']:
-        for team in args['TEAM']:
-            retval = AWS().configure(team)
-            if retval:
-                return retval
-        return 0
-    elif args['aws-cleanup']:
-        return AWS().cleanup()
-    elif args['aws-purge']:
-        for team in args['TEAM']:
-            retval = AWS().purge(team)
-            if retval:
-                return retval
-    elif args['aws-update-all']:
-        aws = AWS()
-        for team in aws.team_to_security_group():
-            retval = aws.configure(team)
-            if retval:
-                return retval
-        return 0
-    elif args['cftemplate']:
-        cf = CFTemplate(test=not args['--no-test'])
-        if args['tsung']:
-            return cf.generate_tsung()
-        else:
-            return cf.generate_stack(app_ami=args['--ami'],
-                                     memcached=args['--memcached'],
-                                     multi=args['--multi'],
-                                     puma=args['--puma'])
-    elif args['cftemplate-update-all']:
-        bit_pos = ['memcached', 'puma', 'multi']
-        for i in range(2 ** len(bit_pos)):
-            kwargs = {'app_ami': None}
-            for bit, argument in enumerate(bit_pos):
-                kwargs[argument] = bool(i & 2 ** bit)
-            cf = CFTemplate(test=not args['--no-test'])
-            retval = cf.generate_stack(**kwargs)
-            if retval:
-                return retval
-        return 0
-    elif args['gh']:
-        team = args['TEAM']
-        team = team[0] if isinstance(team, list) else team
-        return configure_github_team(team_name=team,
-                                     user_names=args['USER'])
-    else:
-        raise Exception('Invalid state')
