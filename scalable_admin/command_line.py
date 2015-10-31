@@ -14,10 +14,7 @@ Usage:
 """
 from __future__ import print_function
 from docopt import docopt
-from . import AWS
-from . import CFTemplate
-from . import configure_github_team
-from . import parse_config
+from . import AWS, CFTemplate, configure_github_team, parse_config
 
 
 def clean_team_names(args):

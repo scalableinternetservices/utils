@@ -13,26 +13,15 @@ import os
 import random
 import string
 import sys
-
-
-__version__ = '0.1'
-
-# The following globals are set in `parse_config`
-GH_ORGANIZATION = S3_BUCKET = None
+from .const import (AWS_CREDENTIAL_PROFILE, EC2_INSTANCE_TYPES, IAM_GROUP_NAME,
+                    GH_ORGANIZATION, RDB_INSTANCE_TYPES, REGION_AMIS,
+                    S3_BUCKET, SERVER_YUM_PACKAGES)
 
 
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
     # The first instance listed will be the default.
-    EC2_INSTANCES = ['t2.micro',
-                     'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                     'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
-                     'r3.large', 'r3.xlarge', 'r3.2xlarge']
-    RDB_INSTANCES = ['db.{0}'.format(x) for x in EC2_INSTANCES
-                     if x != 't2.micro']
-    GROUP = 'scalableinternetservices'
-    PROFILE = 'admin'
 
     @staticmethod
     def op(method, debug_output=True, **kwargs):
@@ -59,7 +48,7 @@ class AWS(object):
     @classmethod
     def set_class_variables(cls, region):
         """Set class-based variables that depend on the passed in region."""
-        cls.region = 'us-east-1'
+        cls.region = region
         cls.arncf = 'arn:aws:cloudformation:{0}:*:{{0}}'.format(cls.region)
         cls.arnec2 = 'arn:aws:ec2:{0}:*:{{0}}'.format(cls.region)
         cls.arnelb = ('arn:aws:elasticloadbalancing:{0}:*:loadbalancer/{{0}}'
@@ -91,7 +80,7 @@ class AWS(object):
 
     def __init__(self):
         """Initialize the AWS class."""
-        self.aws = botocore.session.Session(profile=self.PROFILE)
+        self.aws = botocore.session.Session(profile=AWS_CREDENTIAL_PROFILE)
         self.ec2 = self.aws.create_client('ec2', self.region)
         self.iam = self.aws.create_client('iam', None)
         self.rds = self.aws.create_client('rds', self.region)
@@ -106,13 +95,13 @@ class AWS(object):
 
     def cleanup(self):
         """Clean up old stacks and EC2 instances."""
-        cf = self.aws.create_client('cloudformation', self.region)
+        cloud = self.aws.create_client('cloudformation', self.region)
         now = datetime.now(UTC())
-        for stack in self.op(cf.list_stacks, False)['StackSummaries']:
+        for stack in self.op(cloud.list_stacks, False)['StackSummaries']:
             if stack['StackStatus'] in {'DELETE_COMPLETE'}:
                 continue
             if now - stack['CreationTime'] > timedelta(minutes=290):
-                self.op(cf.delete_stack, StackName=stack['StackName'])
+                self.op(cloud.delete_stack, StackName=stack['StackName'])
 
     def configure(self, team):
         """Create account and configure settings for a team.
@@ -140,9 +129,10 @@ class AWS(object):
                 PolicyDocument=json.dumps({'Statement': s3_statement}))
 
         # Create IAM group if it does not exist
-        self.op(self.iam.create_group, GroupName=self.GROUP)
-        self.op(self.iam.put_group_policy, GroupName=self.GROUP,
-                PolicyName=self.GROUP, PolicyDocument=json.dumps(self.policy))
+        self.op(self.iam.create_group, GroupName=IAM_GROUP_NAME)
+        self.op(self.iam.put_group_policy, GroupName=IAM_GROUP_NAME,
+                PolicyName=IAM_GROUP_NAME,
+                PolicyDocument=json.dumps(self.policy))
 
         # Configure user account / password / access keys / keypair
         if self.op(self.iam.create_user, UserName=team):
@@ -169,7 +159,7 @@ class AWS(object):
                     os.chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
-        self.op(self.iam.add_user_to_group, GroupName=self.GROUP,
+        self.op(self.iam.add_user_to_group, GroupName=IAM_GROUP_NAME,
                 UserName=team)
 
         # Configure security groups
@@ -253,7 +243,7 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Condition': {
-                 'StringLike': {'ec2:InstanceType': self.EC2_INSTANCES}},
+                 'StringLike': {'ec2:InstanceType': EC2_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': AWS.arnec2.format('instance/*')})
         # Filter the RDS instance types that are allowed to be started
@@ -263,7 +253,7 @@ class AWS(object):
                  'Bool': {'rds:MultiAz': 'false'},
                  'NumericEquals': {'rds:Piops': '0', 'rds:StorageSize': '5'},
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
-                 'StringLike': {'rds:DatabaseClass': self.RDB_INSTANCES}},
+                 'StringLike': {'rds:DatabaseClass': RDB_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': [AWS.arnrds.format('{0}*'.format(team).lower()),
                           AWS.arnrdssub.format('{0}'.format(team).lower())]})
@@ -272,7 +262,7 @@ class AWS(object):
         self.op(self.iam.create_group, GroupName=team)
         self.op(self.iam.put_group_policy, GroupName=team, PolicyName=team,
                 PolicyDocument=json.dumps(policy))
-        self.op(self.iam.add_user_to_group, GroupName=team,  UserName=team)
+        self.op(self.iam.add_user_to_group, GroupName=team, UserName=team)
         return 0
 
     def team_to_security_group(self):
@@ -330,8 +320,8 @@ class AWS(object):
             in S3 will be returned. Note that this URL is not publicly
             accessible, but it will work for CloudFormation Stack generation.
         """
-        cf = self.aws.create_client('cloudformation', self.region)
-        valid = bool(self.op(cf.validate_template, TemplateBody=template,
+        cloud = self.aws.create_client('cloudformation', self.region)
+        valid = bool(self.op(cloud.validate_template, TemplateBody=template,
                              debug_output=False))
         if not valid or upload is None:
             return valid
@@ -349,16 +339,6 @@ class AWS(object):
 class CFTemplate(object):
     """Generate Scalable Internet Services Cloudformation templates."""
 
-    DEFAULT_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
-                                  'instance': 'ami-65116700'},
-                    'us-west-2': {'ebs': 'ami-9ff7e8af',
-                                  'instance': 'ami-bbf7e88b'}}
-    PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
-                              'openssl-devel', 'pcre-devel', 'ruby21-devel'},
-                'stack': {'gcc-c++', 'git', 'make', 'mysql-devel',
-                          'ruby21-devel'},
-                'tsung': {'autoconf', 'erlang', 'gcc-c++', 'gnuplot',
-                          'perl-Template-Toolkit', 'python27-matplotlib'}}
     TEMPLATE = {'AWSTemplateFormatVersion': '2010-09-09',
                 'Outputs': {},
                 'Parameters': {},
@@ -441,8 +421,8 @@ class CFTemplate(object):
         def ami_type(instance_type):
             return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
-        return {x: {'ami': self.DEFAULT_AMIS[AWS.region][ami_type(x)]} for x in
-                AWS.EC2_INSTANCES}
+        return {x: {'ami': REGION_AMIS[AWS.region][ami_type(x)]} for x in
+                EC2_INSTANCE_TYPES}
 
     @property
     def default_subnet(self):
@@ -525,9 +505,9 @@ class CFTemplate(object):
     def add_ssh_output(self, resource_name='AppServer'):
         """Output the SSH connection string."""
         self.add_output('SSH', '{0} SSH connect string'.format(resource_name),
-                        self.join(
-            'ssh -i ', self.get_ref('TeamName'), '.pem ec2-user@',
-            self.get_att(resource_name, 'PublicIp')))
+                        self.join('ssh -i ', self.get_ref('TeamName'),
+                                  '.pem ec2-user@',
+                                  self.get_att(resource_name, 'PublicIp')))
 
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
@@ -551,14 +531,14 @@ class CFTemplate(object):
                                             ' worker processes.'))
 
         if self.multi:
-            instances = self.multi_instance_filter(AWS.EC2_INSTANCES)
+            instances = self.multi_instance_filter(EC2_INSTANCE_TYPES)
             url = self.get_att('LoadBalancer', 'DNSName')
             self.add_parameter('AppInstances', 'Number', default=2,
                                description=('The number of AppServer instances'
                                             ' to launch.'),
                                maxv=8, minv=1)
-            self.add_parameter('DBInstanceType', allowed=AWS.RDB_INSTANCES,
-                               default=AWS.RDB_INSTANCES[0],
+            self.add_parameter('DBInstanceType', allowed=RDB_INSTANCE_TYPES,
+                               default=RDB_INSTANCE_TYPES[0],
                                description='The Database instance type.')
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
@@ -659,13 +639,13 @@ class CFTemplate(object):
         self.memcached = memcached
         self.multi = multi
         self.puma = puma
-        self.yum_packages = self.PACKAGES['stack']
+        self.yum_packages = SERVER_YUM_PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
             if memcached:
                 self.yum_packages.add('memcached')
         if not (puma or app_ami):
-            self.yum_packages |= self.PACKAGES['passenger']
+            self.yum_packages |= SERVER_YUM_PACKAGES['passenger']
 
         name_parts = []
         # Identify stack plurality
@@ -725,9 +705,9 @@ class CFTemplate(object):
             'Type': 'AWS::EC2::Instance'}
 
         if instance_filter:
-            instances = instance_filter(AWS.EC2_INSTANCES)
+            instances = instance_filter(EC2_INSTANCE_TYPES)
         else:
-            instances = AWS.EC2_INSTANCES
+            instances = EC2_INSTANCE_TYPES
         self.add_parameter('AppInstanceType', allowed=instances,
                            default=instances[0],
                            description='The AppServer instance type.')
@@ -760,7 +740,7 @@ class CFTemplate(object):
         """Output the cloudformation template for a Tsung instance."""
         sections = ['preamble', 'tsung', 'postamble']
         self.name = 'Tsung'
-        self.yum_packages = self.PACKAGES['tsung']
+        self.yum_packages = SERVER_YUM_PACKAGES['tsung']
         self.add_ssh_output()
         url = self.get_att('AppServer', 'PublicIp')
         self.add_output('URL', 'The URL to the rails application.',
