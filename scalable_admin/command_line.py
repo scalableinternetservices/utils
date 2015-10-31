@@ -14,7 +14,9 @@ Usage:
 """
 from __future__ import print_function
 from docopt import docopt
-from . import AWS, CFTemplate, configure_github_team, parse_config
+from . import AWS, CFTemplate
+from .github import configure_github_team
+from .helper import parse_config
 
 
 def clean_team_names(args):
@@ -95,7 +97,7 @@ def main():
     """Provide the entrance point for the scalable_admin command."""
     args = docopt(__doc__)
 
-    parse_config()
+    parse_config(AWS)
     clean_team_names(args)
 
     commands = {'aws': cmd_aws,

@@ -7,7 +7,7 @@ from os.path import expanduser, isfile
 from random import choice
 from sys import stderr
 from string import ascii_letters, digits
-from . import AWS
+from . import const
 
 
 class UTC(tzinfo):
@@ -46,9 +46,8 @@ def get_pivotaltracker_token():
     return token if token else None
 
 
-def parse_config():
+def parse_config(AWS):
     """Parse the configuation file and set the necessary state."""
-    global GH_ORGANIZATION, S3_BUCKET
     config_path = expanduser('~/.config/scalable_admin.json')
     if not isfile(config_path):
         stderr.write('{0} does not exist.\n'.format(config_path))
@@ -67,5 +66,5 @@ def parse_config():
         exit(1)
 
     AWS.set_class_variables(config['aws_region'])
-    GH_ORGANIZATION = config['github_organization']
-    S3_BUCKET = config['s3_bucket']
+    const.GH_ORGANIZATION = config['github_organization']
+    const.S3_BUCKET = config['s3_bucket']

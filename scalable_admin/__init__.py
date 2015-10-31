@@ -11,9 +11,7 @@ from sys import stderr
 import botocore.exceptions
 import botocore.session
 import json
-from .const import (AWS_CREDENTIAL_PROFILE, EC2_INSTANCE_TYPES, IAM_GROUP_NAME,
-                    GH_ORGANIZATION, RDB_INSTANCE_TYPES, REGION_AMIS,
-                    S3_BUCKET, SERVER_YUM_PACKAGES)
+from . import const
 from .helper import (UTC, generate_password)
 
 
@@ -76,7 +74,8 @@ class AWS(object):
 
     def __init__(self):
         """Initialize the AWS class."""
-        self.aws = botocore.session.Session(profile=AWS_CREDENTIAL_PROFILE)
+        self.aws = botocore.session.Session(
+            profile=const.AWS_CREDENTIAL_PROFILE)
         self.ec2 = self.aws.create_client('ec2', self.region)
         self.iam = self.aws.create_client('iam', None)
         self.rds = self.aws.create_client('rds', self.region)
@@ -106,10 +105,11 @@ class AWS(object):
         """
         s3_statement = [
             {'Action': '*', 'Effect': 'Allow',
-             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(S3_BUCKET, team)},
+             'Resource': 'arn:aws:s3:::{0}/{1}/*'.format(
+                 const.S3_BUCKET, team)},
             {'Action': 's3:ListBucket', 'Effect': 'Allow',
              'Condition': {'StringLike': {'s3:prefix': '{0}/*'.format(team)}},
-             'Resource': 'arn:aws:s3:::{0}'.format(S3_BUCKET)}]
+             'Resource': 'arn:aws:s3:::{0}'.format(const.S3_BUCKET)}]
 
         # Create IAM role (permits S3 access from associated EC2 instances)
         role_policy = {'Statement': {
@@ -125,9 +125,9 @@ class AWS(object):
                 PolicyDocument=json.dumps({'Statement': s3_statement}))
 
         # Create IAM group if it does not exist
-        self.op(self.iam.create_group, GroupName=IAM_GROUP_NAME)
-        self.op(self.iam.put_group_policy, GroupName=IAM_GROUP_NAME,
-                PolicyName=IAM_GROUP_NAME,
+        self.op(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
+        self.op(self.iam.put_group_policy, GroupName=const.IAM_GROUP_NAME,
+                PolicyName=const.IAM_GROUP_NAME,
                 PolicyDocument=json.dumps(self.policy))
 
         # Configure user account / password / access keys / keypair
@@ -155,7 +155,7 @@ class AWS(object):
                     chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
-        self.op(self.iam.add_user_to_group, GroupName=IAM_GROUP_NAME,
+        self.op(self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME,
                 UserName=team)
 
         # Configure security groups
@@ -239,7 +239,7 @@ class AWS(object):
         policy['Statement'].append(
             {'Action': 'ec2:RunInstances',
              'Condition': {
-                 'StringLike': {'ec2:InstanceType': EC2_INSTANCE_TYPES}},
+                 'StringLike': {'ec2:InstanceType': const.EC2_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': AWS.arnec2.format('instance/*')})
         # Filter the RDS instance types that are allowed to be started
@@ -249,7 +249,8 @@ class AWS(object):
                  'Bool': {'rds:MultiAz': 'false'},
                  'NumericEquals': {'rds:Piops': '0', 'rds:StorageSize': '5'},
                  'StringEquals': {'rds:DatabaseEngine': 'mysql'},
-                 'StringLike': {'rds:DatabaseClass': RDB_INSTANCE_TYPES}},
+                 'StringLike': {
+                     'rds:DatabaseClass': const.RDB_INSTANCE_TYPES}},
              'Effect': 'Allow',
              'Resource': [AWS.arnrds.format('{0}*'.format(team).lower()),
                           AWS.arnrdssub.format('{0}'.format(team).lower())]})
@@ -419,8 +420,8 @@ class CFTemplate(object):
             """Return the AMI for a particular instance type."""
             return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
 
-        return {x: {'ami': REGION_AMIS[AWS.region][ami_type(x)]} for x in
-                EC2_INSTANCE_TYPES}
+        return {x: {'ami': const.REGION_AMIS[AWS.region][ami_type(x)]} for x in
+                const.EC2_INSTANCE_TYPES}
 
     @property
     def default_subnet(self):
@@ -442,7 +443,7 @@ class CFTemplate(object):
     def add_apps(self):
         """Update either the EC2 instance or autoscaling group."""
         app = {'sources': {'/home/ec2-user/app': self.join(
-            'https://github.com/{0}/'.format(GH_ORGANIZATION),
+            'https://github.com/{0}/'.format(const.GH_ORGANIZATION),
             self.get_ref('TeamName'), '/tarball/', self.get_ref('Branch'))}}
         if not self.multi:
             app['services'] = {'sysvinit': {'mysqld': self.ENABLE_PARAM}}
@@ -528,14 +529,15 @@ class CFTemplate(object):
                                             ' worker processes.'))
 
         if self.multi:
-            instances = self.multi_instance_filter(EC2_INSTANCE_TYPES)
+            instances = self.multi_instance_filter(const.EC2_INSTANCE_TYPES)
             url = self.get_att('LoadBalancer', 'DNSName')
             self.add_parameter('AppInstances', 'Number', default=2,
                                description=('The number of AppServer instances'
                                             ' to launch.'),
                                maxv=8, minv=1)
-            self.add_parameter('DBInstanceType', allowed=RDB_INSTANCE_TYPES,
-                               default=RDB_INSTANCE_TYPES[0],
+            self.add_parameter('DBInstanceType',
+                               allowed=const.RDB_INSTANCE_TYPES,
+                               default=const.RDB_INSTANCE_TYPES[0],
                                description='The Database instance type.')
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
@@ -636,13 +638,13 @@ class CFTemplate(object):
         self.memcached = memcached
         self.multi = multi
         self.puma = puma
-        self.yum_packages = SERVER_YUM_PACKAGES['stack']
+        self.yum_packages = const.SERVER_YUM_PACKAGES['stack']
         if not multi:
             self.yum_packages.add('mysql-server')
             if memcached:
                 self.yum_packages.add('memcached')
         if not (puma or app_ami):
-            self.yum_packages |= SERVER_YUM_PACKAGES['passenger']
+            self.yum_packages |= const.SERVER_YUM_PACKAGES['passenger']
 
         name_parts = []
         # Identify stack plurality
@@ -702,9 +704,9 @@ class CFTemplate(object):
             'Type': 'AWS::EC2::Instance'}
 
         if instance_filter:
-            instances = instance_filter(EC2_INSTANCE_TYPES)
+            instances = instance_filter(const.EC2_INSTANCE_TYPES)
         else:
-            instances = EC2_INSTANCE_TYPES
+            instances = const.EC2_INSTANCE_TYPES
         self.add_parameter('AppInstanceType', allowed=instances,
                            default=instances[0],
                            description='The AppServer instance type.')
@@ -723,7 +725,8 @@ class CFTemplate(object):
                               sort_keys=True)
         if self.test:
             self.name += 'Test'
-        tmp = AWS().verify_template(template, (S3_BUCKET, self.name + '.json'))
+        tmp = AWS().verify_template(template,
+                                    (const.S3_BUCKET, self.name + '.json'))
         if tmp:
             if isinstance(self, bool):
                 print(template)
@@ -737,7 +740,7 @@ class CFTemplate(object):
         """Output the cloudformation template for a Tsung instance."""
         sections = ['preamble', 'tsung', 'postamble']
         self.name = 'Tsung'
-        self.yum_packages = SERVER_YUM_PACKAGES['tsung']
+        self.yum_packages = const.SERVER_YUM_PACKAGES['tsung']
         self.add_ssh_output()
         url = self.get_att('AppServer', 'PublicIp')
         self.add_output('URL', 'The URL to the rails application.',
