@@ -1,21 +1,20 @@
 """Scalable Admin is a helps administrate teams' access to github and aws."""
 
 from __future__ import print_function
-from datetime import datetime, timedelta, tzinfo
+from copy import deepcopy
+from datetime import datetime, timedelta
 from pkg_resources import resource_stream
+from os import chmod
 from pprint import pprint
 from string import Formatter
+from sys import stderr
 import botocore.exceptions
 import botocore.session
-import copy
 import json
-import os
-import random
-import string
-import sys
 from .const import (AWS_CREDENTIAL_PROFILE, EC2_INSTANCE_TYPES, IAM_GROUP_NAME,
                     GH_ORGANIZATION, RDB_INSTANCE_TYPES, REGION_AMIS,
                     S3_BUCKET, SERVER_YUM_PACKAGES)
+from .helper import (UTC, generate_password)
 
 
 class AWS(object):
@@ -27,21 +26,20 @@ class AWS(object):
         try:
             response = method(**kwargs)
         except botocore.exceptions.ClientError as exc:
-            sys.stderr.write(exc.message)
-            sys.stderr.write('\n')
+            stderr.write(exc.message)
+            stderr.write('\n')
             return False
         except:
             raise
         if debug_output:
-            sys.stderr.write('Success: {0} {1}\n'
-                             .format(method.__name__, kwargs))
+            stderr.write('Success: {0} {1}\n'.format(method.__name__, kwargs))
         return response
 
     @staticmethod
     def operation_list(service_name):
         """Output the available API commands and exit."""
         pprint(service_name[0].operations)
-        sys.exit(1)
+        exit(1)
 
     @classmethod
     def set_class_variables(cls, region):
@@ -154,7 +152,7 @@ class AWS(object):
             if data:
                 filename = '{0}.pem'.format(team)
                 with open(filename, 'w') as fd:
-                    os.chmod(filename, 0o600)
+                    chmod(filename, 0o600)
                     fd.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
         self.op(self.iam.add_user_to_group, GroupName=IAM_GROUP_NAME,
@@ -409,7 +407,7 @@ class CFTemplate(object):
         """
         self.ami = self.memcached = self.multi = self.name = self.puma = None
         self.create_timeout = 'PT10M'
-        self.template = copy.deepcopy(self.TEMPLATE)
+        self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
         self._team_map = None
@@ -748,154 +746,3 @@ class CFTemplate(object):
         return self.generate_template(sections, 'AppServer',
                                       self.callback_single_server,
                                       self.tsung_instance_filter)
-
-
-class UTC(tzinfo):
-    """Specify the UTC timezone.
-
-    From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
-    """
-
-    dst = lambda x, y: timedelta(0)
-    tzname = lambda x, y: 'UTC'
-    utcoffset = lambda x, y: timedelta(0)
-
-
-def configure_github_team(team_name, user_names):
-    """Create team and team repository and add users to the team on Github."""
-    print("""About to create:
-     Team: {0}
-     Members: {1}\n""".format(team_name, ', '.join(user_names)))
-    sys.stdout.write('Do you want to continue? [yN]: ')
-    sys.stdout.flush()
-    if sys.stdin.readline().strip().lower() not in ['y', 'yes', '1']:
-        print('Aborting')
-        return 1
-
-    org = github_authenticate_and_fetch_org()
-
-    team = None  # Fetch or create team
-    for iteam in org.teams():
-        if iteam.name == team_name:
-            team = iteam
-            break
-    if team is None:
-        team = org.create_team(team_name, permission='admin')
-
-    repo = None  # Fetch or create repository
-    for irepo in org.repositories('public'):
-        if irepo.name == team_name:
-            repo = irepo
-            break
-    if repo is None:  # Create repo and associate with the team
-        repo = org.create_repository(team_name, has_wiki=False,
-                                     team_id=team.id)
-    elif team not in list(repo.teams()):
-        print(org.add_repo(repo, team))
-
-    # Add PT integration hook
-    pt_token = get_pivotaltracker_token()
-    if pt_token:
-        if not repo.create_hook('pivotaltracker', {'token': pt_token}):
-            print('Failed to add PT hook.')
-
-    for user in user_names:  # Add users to the team
-        print(team.invite(user))
-
-    return 0
-
-
-def generate_password(length=16):
-    """Generate password containing both cases of letters and digits."""
-    characters = string.ascii_letters + string.digits
-    selection = '0'
-    while selection.isalpha() or selection.isdigit() or selection.isupper()\
-            or selection.islower():
-        selection = ''.join(random.choice(characters) for _ in range(length))
-    return selection
-
-
-def parse_config():
-    """Parse the configuation file and set the necessary state."""
-    global GH_ORGANIZATION, S3_BUCKET
-    config_path = os.path.expanduser('~/.config/scalable_admin.json')
-    if not os.path.isfile(config_path):
-        sys.stderr.write('{0} does not exist.\n'.format(config_path))
-        sys.exit(1)
-
-    with open(config_path) as fp:
-        config = json.load(fp)
-
-    error = False
-    for key in ['aws_region', 'github_organization', 's3_bucket']:
-        if key not in config:
-            sys.stderr.write('The key {0} does not exist in {1}\n'.format(
-                key, config_path))
-            error = True
-    if error:
-        sys.exit(1)
-
-    AWS.set_class_variables(config['aws_region'])
-    GH_ORGANIZATION = config['github_organization']
-    S3_BUCKET = config['s3_bucket']
-
-
-def get_github_token():
-    """Fetch and/or load API authorization token for Github."""
-    credential_file = os.path.expanduser('~/.config/scalable_github_creds')
-    if os.path.isfile(credential_file):
-        with open(credential_file) as fd:
-            token = fd.readline().strip()
-            auth_id = fd.readline().strip()
-            return token, auth_id
-
-    from github3 import authorize
-    from getpass import getpass
-
-    def two_factor_callback():
-        """Obtain input for 2FA token."""
-        sys.stdout.write('Two factor token: ')
-        sys.stdout.flush()
-        return sys.stdin.readline().strip()
-
-    user = raw_input("Github admin username: ")
-    auth = authorize(user, getpass('Password for {0}: '.format(user)),
-                     ['public_repo', 'admin:org'],
-                     'Scalable Internet Services Create Repo Script {0}'
-                     .format(random.randint(100, 999)), 'http://example.com',
-                     two_factor_callback=two_factor_callback)
-
-    with open(credential_file, 'w') as fd:
-        fd.write('{0}\n{1}\n'.format(auth.token, auth.id))
-    return auth.token, auth.id
-
-
-def get_pivotaltracker_token():
-    """Return PivotalTracker API token if it exists."""
-    token_file = os.path.expanduser('~/.config/pivotaltracker_token')
-    if os.path.isfile(token_file):
-        with open(token_file) as fd:
-            token = fd.readline().strip()
-    else:
-        from getpass import getpass
-        token = getpass('PivotalTracker API token: ').strip()
-        if token:
-            with open(token_file, 'w') as fd:
-                fd.write('{0}\n'.format(token))
-    return token if token else None
-
-
-def github_authenticate_and_fetch_org():
-    """Authenticate to github and return the desired organization handle."""
-    from github3 import GitHubError, login
-
-    while True:
-        gh_token, _ = get_github_token()
-        github = login(token=gh_token)
-        try:  # Test login
-            return github.membership_in(GH_ORGANIZATION).organization
-        except GitHubError as exc:
-            if exc.code != 401:  # Bad Credentials
-                raise
-            print('{0}. Try again.'.format(exc.message))
-            os.unlink(os.path.expanduser('~/.config/github_creds'))
