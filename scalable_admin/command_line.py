@@ -65,7 +65,7 @@ def cmd_cftemplate(args):
     cf = CFTemplate(test=not args['--no-test'])
     if args['tsung']:
         return cf.generate_tsung()
-    return cf.generate_stack(app_ami=args['--ami'],
+    return cf.generate_stack(app_ami=None,
                              memcached=args['--memcached'],
                              multi=args['--multi'], puma=args['--puma'])
 
