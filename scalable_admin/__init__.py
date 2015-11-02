@@ -539,10 +539,9 @@ class CFTemplate(object):
         if self.multi:
             instances = self.multi_instance_filter(const.EC2_INSTANCE_TYPES)
             url = self.get_att('LoadBalancer', 'DNSName')
-            self.add_parameter('AppInstances', 'Number', default=2,
+            self.add_parameter('AppInstances', allowed=range(1, 9), default=2,
                                description=('The number of AppServer instances'
-                                            ' to launch.'),
-                               maxv=8, minv=1)
+                                            ' to launch.'))
             self.add_parameter('DBInstanceType',
                                allowed=const.RDB_INSTANCE_TYPES,
                                default=const.RDB_INSTANCE_TYPES[0],
