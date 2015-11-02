@@ -33,10 +33,10 @@ across a cluster app server EC2 instances. Each instance in cluster is
 configured to work as described above for its corresponding type.
 
 * __NGINX + Passenger__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassenger-ami-c5c4f9f5.json
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassenger.json
     * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassenger.json
 * __NGINX + Passenger + mecmached__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached-ami-c5c4f9f5.json
+    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached.json
     * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassengerMemcached.json
 * __Puma__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
