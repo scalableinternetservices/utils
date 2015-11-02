@@ -1,5 +1,6 @@
 """Provides functions that interact with github's API."""
 
+from __future__ import print_function
 from os import unlink
 from os.path import expanduser, isfile
 from random import randint

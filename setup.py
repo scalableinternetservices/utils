@@ -1,3 +1,5 @@
+"""Scalable Admin package setup."""
+
 import os
 import re
 from setuptools import setup
