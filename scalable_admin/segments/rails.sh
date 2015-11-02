@@ -26,7 +26,22 @@ echo -e "
 gem 'multi_json'" >> Gemfile
 
 # Run the remaining commands as the ec2-user in the app directory
-user_sudo bundle install --without test development || error_exit 'Failed to install bundle'
+
+# Try up to 5 times to run `bundle install` (fails occasionally due to timeout)
+loop=5
+while [ $loop -gt 0 ]; do
+  user_sudo bundle install --without test development
+  if [ $? -eq 0 ]; then
+    loop=-1
+  else
+    sleep 6
+    loop=$(expr $loop - 1)
+  fi
+done
+if [ $loop -eq 0 ]; then
+  error_exit 'Failed to install bundle'
+fi
+
 # Create the database and run the migrations (try up to 10x)
 loop=10
 while [ $loop -gt 0 ]; do
