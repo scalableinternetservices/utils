@@ -26,10 +26,10 @@ EC2_MAX_SPOT_PRICES = {
     'r3.xlarge':  '0.35',
     'r3.2xlarge': '0.70'}
 
-REGION_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
-                             'instance': 'ami-65116700'},
-               'us-west-2': {'ebs': 'ami-9ff7e8af',
-                             'instance': 'ami-bbf7e88b'}}
+REGION_AMIS = {'us-east-1': {'ebs': 'ami-60b6c60a',
+                             'instance': 'ami-66b6c60c'},
+               'us-west-2': {'ebs': 'ami-f0091d91',
+                             'instance': 'ami-31342050'}}
 SERVER_YUM_PACKAGES = {'passenger': {'gcc-c++', 'libcurl-devel', 'make',
                                      'openssl-devel', 'pcre-devel',
                                      'ruby21-devel'},
