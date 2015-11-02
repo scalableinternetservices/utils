@@ -52,7 +52,7 @@ def cmd_aws_purge(args):
     return 0
 
 
-def cmd_aws_update_all(args):
+def cmd_aws_update_all(_):
     """Handle the aws-update-all command."""
     aws = AWS()
     for team in aws.team_to_security_group():
@@ -111,5 +111,5 @@ def main():
     for command_name in commands:
         if args[command_name]:
             return commands[command_name](args)
-    else:
-        raise Exception('Invalid state')
+
+    raise Exception('Unexpected command.')

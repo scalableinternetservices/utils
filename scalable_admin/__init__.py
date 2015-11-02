@@ -429,6 +429,12 @@ class CFTemplate(object):
         return sorted(self.subnets)[0]
 
     @property
+    def spot_pricing_map(self):
+        """Return a mapping of instance type to spot price."""
+        return {key: {'price': value} for (key, value) in
+                const.EC2_MAX_SPOT_PRICES.items()}
+
+    @property
     def subnets(self):
         """Return a list of VPC subnets."""
         return [x['subnet'] for x in self.subnet_map().values()]
@@ -469,6 +475,8 @@ class CFTemplate(object):
         if self.multi:
             conf['Properties']['SecurityGroups'] = [self.get_map(
                 'Teams', self.get_ref('TeamName'), 'sg')]
+            conf['Properties']['SpotPrice'] = self.get_map(
+                'SpotPrices', self.get_ref('AppInstanceType'), 'price')
             conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
             conf['CreationPolicy'] = {
@@ -531,10 +539,9 @@ class CFTemplate(object):
         if self.multi:
             instances = self.multi_instance_filter(const.EC2_INSTANCE_TYPES)
             url = self.get_att('LoadBalancer', 'DNSName')
-            self.add_parameter('AppInstances', 'Number', default=2,
+            self.add_parameter('AppInstances', allowed=range(1, 9), default=2,
                                description=('The number of AppServer instances'
-                                            ' to launch.'),
-                               maxv=8, minv=1)
+                                            ' to launch.'))
             self.add_parameter('DBInstanceType',
                                allowed=const.RDB_INSTANCE_TYPES,
                                default=const.RDB_INSTANCE_TYPES[0],
@@ -715,6 +722,7 @@ class CFTemplate(object):
                            description='Your team name.')
 
         self.template['Mappings'] = {'AMIs': self.ami_map,
+                                     'SpotPrices': self.spot_pricing_map,
                                      'Subnets': self.subnet_map(),
                                      'Teams': self.team_map}
 
