@@ -401,13 +401,18 @@ class CFTemplate(object):
             cls._subnet_map = AWS().az_to_subnet()
         return cls._subnet_map
 
+    @classmethod
+    def timeout(cls, minutes):
+        """Return a timeout string in minutes."""
+        return 'PT{0:d}M'.format(minutes)
+
     def __init__(self, test):
         """Initialize the CFTemplate class.
 
         :param test: When true, append 'Test' to generated template name.
         """
         self.ami = self.memcached = self.multi = self.name = self.puma = None
-        self.create_timeout = 'PT10M'
+        self.create_timeout = 10  # Minutes
         self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
@@ -480,7 +485,8 @@ class CFTemplate(object):
             conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
             conf['CreationPolicy'] = {
-                'ResourceSignal': {'Timeout': self.create_timeout}}
+                'ResourceSignal': {'Timeout':
+                                   self.timeout(self.create_timeout)}}
             conf['Properties']['SecurityGroupIds'] = [self.get_map(
                 'Teams', self.get_ref('TeamName'), 'sg')]
             conf['Properties']['SubnetId'] = self.default_subnet
@@ -518,7 +524,7 @@ class CFTemplate(object):
     def callback_single_server(self):
         """Update the template parameters for a single-server instance."""
         self.template['Resources']['AppServer']['CreationPolicy'] = {
-            'ResourceSignal': {'Timeout': self.create_timeout}}
+            'ResourceSignal': {'Timeout': self.timeout(self.create_timeout)}}
 
     def callback_stack(self):
         """Update the template parameters for the stack."""
@@ -549,7 +555,7 @@ class CFTemplate(object):
             self.template['Resources']['AppGroup'] = {
                 'CreationPolicy': {'ResourceSignal': {
                     'Count': self.get_ref('AppInstances'),
-                    'Timeout': self.create_timeout}},
+                    'Timeout': self.timeout(self.create_timeout * 3 / 2)}},
                 'Properties': {
                     'LaunchConfigurationName':
                     self.get_ref('AppServer'),
