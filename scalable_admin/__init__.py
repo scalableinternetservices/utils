@@ -429,6 +429,12 @@ class CFTemplate(object):
         return sorted(self.subnets)[0]
 
     @property
+    def spot_pricing_map(self):
+        """Return a mapping of instance type to spot price."""
+        return {key: {'price': value} for (key, value) in
+                const.EC2_MAX_SPOT_PRICES.items()}
+
+    @property
     def subnets(self):
         """Return a list of VPC subnets."""
         return [x['subnet'] for x in self.subnet_map().values()]
@@ -469,6 +475,8 @@ class CFTemplate(object):
         if self.multi:
             conf['Properties']['SecurityGroups'] = [self.get_map(
                 'Teams', self.get_ref('TeamName'), 'sg')]
+            conf['Properties']['SpotPrice'] = self.get_map(
+                'SpotPrices', self.get_ref('AppInstanceType'), 'price')
             conf['Type'] = 'AWS::AutoScaling::LaunchConfiguration'
         else:
             conf['CreationPolicy'] = {
@@ -715,6 +723,7 @@ class CFTemplate(object):
                            description='Your team name.')
 
         self.template['Mappings'] = {'AMIs': self.ami_map,
+                                     'SpotPrices': self.spot_pricing_map,
                                      'Subnets': self.subnet_map(),
                                      'Teams': self.team_map}
 

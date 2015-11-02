@@ -22,9 +22,9 @@ EC2_MAX_SPOT_PRICES = {
     'c3.xlarge':  '0.21',
     'c3.2xlarge': '0.42',
     'c3.4xlarge': '0.84',
-    'r3.large',:  '0.17',
+    'r3.large':   '0.17',
     'r3.xlarge':  '0.35',
-    'r3.2xlarge'  '0.70'}
+    'r3.2xlarge': '0.70'}
 
 REGION_AMIS = {'us-east-1': {'ebs': 'ami-e3106686',
                              'instance': 'ami-65116700'},
