@@ -1,6 +1,6 @@
 #!/bin/bash -v
 yum update -y aws-cfn-bootstrap
-yum update
+yum update -y
 # Helper function
 function error_exit {{
     echo "ERROR: $1"
