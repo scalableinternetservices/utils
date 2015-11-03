@@ -521,11 +521,6 @@ class CFTemplate(object):
                                   '.pem ec2-user@',
                                   self.get_att(resource_name, 'PublicIp')))
 
-    def callback_single_server(self):
-        """Update the template parameters for a single-server instance."""
-        self.template['Resources']['AppServer']['CreationPolicy'] = {
-            'ResourceSignal': {'Timeout': self.timeout(self.create_timeout)}}
-
     def callback_stack(self):
         """Update the template parameters for the stack."""
         self.add_parameter('Branch', default='master',
@@ -630,6 +625,15 @@ class CFTemplate(object):
                         self.join('http://', url))
         self.add_apps()
 
+    def callback_tsung(self):
+        """Update the template parameters for a tsung instance."""
+        appserver = self.template['Resources']['AppServer']
+        appserver['CreationPolicy'] = {
+            'ResourceSignal': {'Timeout': self.timeout(self.create_timeout)}}
+        appserver['Properties']['SecurityGroupIds'] = [self.get_map(
+            'Teams', self.get_ref('TeamName'), 'sg')]
+        appserver['Properties']['SubnetId'] = self.default_subnet
+
     def generate_stack(self, app_ami, memcached, multi, puma):
         """Output the generated AWS cloudformation template.
 
@@ -687,12 +691,11 @@ class CFTemplate(object):
 
         resource = 'AppGroup' if self.multi else 'AppServer'
         instance_filter = self.multi_instance_filter if self.multi else None
-        return self.generate_template(sections, resource,
-                                      callback=self.callback_stack,
-                                      instance_filter=instance_filter)
+        return self.create_template(sections, resource, self.callback_stack,
+                                    instance_filter)
 
-    def generate_template(self, sections, resource, callback=None,
-                          instance_filter=None):
+    def create_template(self, sections, resource, callback=None,
+                        instance_filter=None):
         """Generate the common template functionality.
 
         :param callback: Call the callback function prior to returning if
@@ -759,7 +762,5 @@ class CFTemplate(object):
         url = self.get_att('AppServer', 'PublicIp')
         self.add_output('URL', 'The URL to the rails application.',
                         self.join('http://', url))
-
-        return self.generate_template(sections, 'AppServer',
-                                      self.callback_single_server,
-                                      self.tsung_instance_filter)
+        return self.create_template(sections, 'AppServer', self.callback_tsung,
+                                    self.tsung_instance_filter)
