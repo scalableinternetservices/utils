@@ -1,5 +1,5 @@
 # Update alternatives
-alternatives --set ruby /usr/bin/ruby2.1 || error_exit 'Failed ruby2.1 default'
+alternatives --set ruby /usr/bin/ruby2.2 || error_exit 'Failed ruby2.2 default'
 
 # Install bundler only after the alternatives have been set.
 loop 4 gem install bundle || error_exit 'Failed to install bundle'
