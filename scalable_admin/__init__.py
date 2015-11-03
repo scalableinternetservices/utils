@@ -412,7 +412,7 @@ class CFTemplate(object):
         :param test: When true, append 'Test' to generated template name.
         """
         self.ami = self.memcached = self.multi = self.name = self.puma = None
-        self.create_timeout = 10  # Minutes
+        self.create_timeout = 16  # Minutes
         self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
