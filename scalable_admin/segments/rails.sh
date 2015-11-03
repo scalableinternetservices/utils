@@ -26,39 +26,13 @@ echo -e "
 gem 'multi_json'" >> Gemfile
 
 # Run the remaining commands as the ec2-user in the app directory
+loop 4 user_sudo bundle install --without test development || error_exit 'Failed to install bundle'
+loop 8 user_sudo rake db:create db:migrate || error_exit 'Failed to execute database migration'
 
-# Try up to 5 times to run `bundle install` (fails occasionally due to timeout)
-loop=5
-while [ $loop -gt 0 ]; do
-  user_sudo bundle install --without test development
-  if [ $? -eq 0 ]; then
-    loop=-1
-  else
-    sleep 6
-    loop=$(expr $loop - 1)
-  fi
-done
-if [ $loop -eq 0 ]; then
-  error_exit 'Failed to install bundle'
-fi
-
-# Create the database and run the migrations (try up to 10x)
-loop=10
-while [ $loop -gt 0 ]; do
-  user_sudo rake db:create db:migrate
-  if [ $? -eq 0 ]; then
-    loop=-1
-  else
-    sleep 6
-    loop=$(expr $loop - 1)
-  fi
-done
-if [ $loop -eq 0 ]; then
-  error_exit 'Failed to execute database migration'
-fi
 # Run the app specific ec2 initialization
 if [ -f .rails_initialize ]; then
     sudo -u ec2-user bash -l .rails_initialize || error_exit 'Failed to run .rails_initialize'
 fi
+
 # Generate static assets
 user_sudo rake assets:precompile || error_exit 'Failed to precompile static assets'
