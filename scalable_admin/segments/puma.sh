@@ -1,6 +1,6 @@
 # Configure the app to serve static assets
 echo -e "
-gem 'puma' " >> /home/ec2-user/app/Gemfile
+gem 'puma'" >> /home/ec2-user/app/Gemfile
 cd /home/ec2-user/app
 if [ '{RubyVM}' == 'JRuby' ]; then
   gpg --keyserver hkp://keys.gnupg.net   --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
