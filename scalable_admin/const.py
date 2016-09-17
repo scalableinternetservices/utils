@@ -1,8 +1,10 @@
 """Define constants used throughout the package."""
+from os.path import expanduser
 
 __version__ = '0.1'
 
 AWS_CREDENTIAL_PROFILE = 'admin'
+GH_CREDENTIAL_FILE = expanduser('~/.config/github_creds')
 IAM_GROUP_NAME = 'scalableinternetservices'
 
 EC2_INSTANCE_TYPES = ['t2.micro',

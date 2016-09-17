@@ -2,10 +2,10 @@
 
 from __future__ import print_function
 from os import unlink
-from os.path import expanduser, isfile
+from os.path import isfile
 from random import randint
 from sys import stdin, stdout
-from .const import GH_ORGANIZATION
+from .const import GH_CREDENTIAL_FILE, GH_ORGANIZATION
 from .helper import get_pivotaltracker_token
 
 
@@ -55,9 +55,8 @@ def configure_github_team(team_name, user_names):
 
 def get_github_token():
     """Fetch and/or load API authorization token for Github."""
-    credential_file = expanduser('~/.config/scalable_github_creds')
-    if isfile(credential_file):
-        with open(credential_file) as fd:
+    if isfile(GH_CREDENTIAL_FILE):
+        with open(GH_CREDENTIAL_FILE) as fd:
             token = fd.readline().strip()
             auth_id = fd.readline().strip()
             return token, auth_id
@@ -78,7 +77,7 @@ def get_github_token():
                      .format(randint(100, 999)), 'http://example.com',
                      two_factor_callback=two_factor_callback)
 
-    with open(credential_file, 'w') as fd:
+    with open(GH_CREDENTIAL_FILE, 'w') as fd:
         fd.write('{0}\n{1}\n'.format(auth.token, auth.id))
     return auth.token, auth.id
 
@@ -96,4 +95,6 @@ def github_authenticate_and_fetch_org():
             if exc.code != 401:  # Bad Credentials
                 raise
             print('{0}. Try again.'.format(exc.message))
-            unlink(expanduser('~/.config/github_creds'))
+
+            if isfile(GH_CREDENTIAL_FILE):
+                unlink(GH_CREDENTIAL_FILE)
