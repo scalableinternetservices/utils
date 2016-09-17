@@ -31,21 +31,6 @@ def generate_password(length=16):
     return selection
 
 
-def get_pivotaltracker_token():
-    """Return PivotalTracker API token if it exists."""
-    token_file = expanduser('~/.config/pivotaltracker_token')
-    if isfile(token_file):
-        with open(token_file) as fd:
-            token = fd.readline().strip()
-    else:
-        from getpass import getpass
-        token = getpass('PivotalTracker API token: ').strip()
-        if token:
-            with open(token_file, 'w') as fd:
-                fd.write('{0}\n'.format(token))
-    return token if token else None
-
-
 def parse_config(AWS):
     """Parse the configuation file and set the necessary state."""
     config_path = expanduser('~/.config/scalable_admin.json')

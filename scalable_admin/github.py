@@ -6,7 +6,6 @@ from os.path import isfile
 from random import randint
 from sys import stdin, stdout
 from .const import GH_CREDENTIAL_FILE, GH_ORGANIZATION
-from .helper import get_pivotaltracker_token
 
 
 def configure_github_team(team_name, user_names):
@@ -40,12 +39,6 @@ def configure_github_team(team_name, user_names):
                                      team_id=team.id)
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
-
-    # Add PT integration hook
-    pt_token = get_pivotaltracker_token()
-    if pt_token:
-        if not repo.create_hook('pivotaltracker', {'token': pt_token}):
-            print('Failed to add PT hook.')
 
     for user in user_names:  # Add users to the team
         print(team.invite(user))
