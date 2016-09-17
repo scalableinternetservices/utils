@@ -16,9 +16,9 @@ class UTC(tzinfo):
     From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
     """
 
-    dst = lambda x, y: timedelta(0)
-    tzname = lambda x, y: 'UTC'
-    utcoffset = lambda x, y: timedelta(0)
+    dst = lambda x, y: timedelta(0)  # NOQA
+    tzname = lambda x, y: 'UTC'  # NOQA
+    utcoffset = lambda x, y: timedelta(0)  # NOQA
 
 
 def generate_password(length=16):
