@@ -121,7 +121,7 @@ you issue a `gh` command. An access token will be saved to
 `~/.config/github_creds`. The github account you use should have admin rights
 to the github organization.
 
-__Create/update `$(HOME)/.config/scalable_admin.json`
+__Create/update `$(HOME)/.config/scalable_admin.json`__
 
 The file has three keys that need to be set:
 
