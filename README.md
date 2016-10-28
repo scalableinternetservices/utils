@@ -8,18 +8,14 @@ Both the app server, and database are located on a single EC2 instance.
   NGINX handles requests to port 80 and passes connections to instances of the
   app through Passenger. Multiple concurrent connections are supported.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassenger.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePassenger.json
 * __NGINX + Passenger + memcached__:  
   Same as above, with the addition of using memcached through the `dalli` gem.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePassengerMemcached.json
 * __Puma__:  
   Puma allows both thread-based and process-based concurrency.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePuma.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePuma.json
 * __Puma + memcached__:  
   Same as above, with the addition of using memcached through the `dalli` gem.
-    * (UCSB) https://cs290b.s3.amazonaws.com/SinglePumaMemcached.json
 * __WEBrick__ (Use only for slow-performance testing):  
   WEBrick handles requests to port 80 directly, permitting only a single
   connection at a time.  
@@ -34,16 +30,12 @@ configured to work as described above for its corresponding type.
 
 * __NGINX + Passenger__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassenger.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassenger.json
 * __NGINX + Passenger + mecmached__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPassengerMemcached.json
 * __Puma__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPuma.json
 * __Puma + mecmached__:
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/MultiPumaMemcached.json
 
 ## Other Templates
 
@@ -51,7 +43,6 @@ configured to work as described above for its corresponding type.
   This instance provides an installed version of Tsung at your disposal. You
   will need to copy/rsync over your tsung xml tests.
     * (UCLA) https://scalableinternetservices.s3.amazonaws.com/Tsung.json
-    * (UCSB) https://cs290b.s3.amazonaws.com/Tsung.json
 
 ## Running your own instance configuration
 
@@ -138,9 +129,9 @@ Below is an example of the contents of the json file:
 
 ```json
 {
-"aws_region": "us-east-1",
+"aws_region": "us-west-2",
 "github_organization": "scalableinternetservices",
-"s3_bucket": "cs290b"
+"s3_bucket": "cs291"
 }
 ```
 
