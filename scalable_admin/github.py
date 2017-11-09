@@ -19,7 +19,7 @@ def configure_github_team(team_name, user_names):
         print('Aborting')
         return 1
 
-    org = github_authenticate_and_fetch_org()
+    org = github_authenticate_with_org()
 
     team = None  # Fetch or create team
     for iteam in org.teams():
@@ -49,9 +49,9 @@ def configure_github_team(team_name, user_names):
 def get_github_token():
     """Fetch and/or load API authorization token for Github."""
     if isfile(const.GH_CREDENTIAL_FILE):
-        with open(const.GH_CREDENTIAL_FILE) as fd:
-            token = fd.readline().strip()
-            auth_id = fd.readline().strip()
+        with open(const.GH_CREDENTIAL_FILE) as file_descriptor:
+            token = file_descriptor.readline().strip()
+            auth_id = file_descriptor.readline().strip()
             return token, auth_id
 
     from github3 import authorize
@@ -70,12 +70,12 @@ def get_github_token():
                      .format(randint(100, 999)), 'http://example.com',
                      two_factor_callback=two_factor_callback)
 
-    with open(const.GH_CREDENTIAL_FILE, 'w') as fd:
-        fd.write('{0}\n{1}\n'.format(auth.token, auth.id))
+    with open(const.GH_CREDENTIAL_FILE, 'w') as file_descriptor:
+        file_descriptor.write('{0}\n{1}\n'.format(auth.token, auth.id))
     return auth.token, auth.id
 
 
-def github_authenticate_and_fetch_org():
+def github_authenticate_with_org():
     """Authenticate to github and return the desired organization handle."""
     from github3 import GitHubError, login
 

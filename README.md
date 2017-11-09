@@ -1,89 +1,4 @@
-# Scalable Internet Services Templates
-
-## Single Instance Templates
-
-Both the app server, and database are located on a single EC2 instance.
-
-* __NGINX + Passenger__ (Recommended for regular testing):  
-  NGINX handles requests to port 80 and passes connections to instances of the
-  app through Passenger. Multiple concurrent connections are supported.
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassenger.json
-* __NGINX + Passenger + memcached__:  
-  Same as above, with the addition of using memcached through the `dalli` gem.
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePassengerMemcached.json
-* __Puma__:  
-  Puma allows both thread-based and process-based concurrency.
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SinglePuma.json
-* __Puma + memcached__:  
-  Same as above, with the addition of using memcached through the `dalli` gem.
-* __WEBrick__ (Use only for slow-performance testing):  
-  WEBrick handles requests to port 80 directly, permitting only a single
-  connection at a time.  
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/SingleWEBrick.json
-
-
-## Multiple Instance Templates
-
-These templates launch stacks where a load balancer (ELB) distributes requests
-across a cluster app server EC2 instances. Each instance in cluster is
-configured to work as described above for its corresponding type.
-
-* __NGINX + Passenger__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassenger.json
-* __NGINX + Passenger + mecmached__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPassengerMemcached.json
-* __Puma__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPuma.json
-* __Puma + mecmached__:
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/MultiPumaMemcached.json
-
-## Other Templates
-
-* __Tsung__:  
-  This instance provides an installed version of Tsung at your disposal. You
-  will need to copy/rsync over your tsung xml tests.
-    * (UCLA) https://scalableinternetservices.s3.amazonaws.com/Tsung.json
-
-## Running your own instance configuration
-
-Add the file `.rails_initialize` to the root of your application's
-repository. This should contain commands that execute as the ec2-user just
-after running `rake db:migrate`. Commands that require root should be prefixed
-with `sudo`. An example is provided below:
-
-__.rails_initialize__
-
-    rake db:seed
-
-If you need to execute commands before installing gems, add the file
-`.ec2_initialize` to the root of your application's repository. This should
-contain commands that execute as the ec2-user just *before* running `rake
-db:migrate`. Commands that require root should be prefixed with `sudo`. An
-example is provided below:
-
-__.ec2_initialize__
-
-    sudo yum install -y ImageMagick
-
-## Configuring NGINX
-
-NGINX is provided through _passenger-standalone_, and NGINX + Passenger is
-configured to start in the cloudformation templates via the command `passenger
-start`. If you would like to adjust some of the NGINX settings you can do two
-things:
-
-First, add a `Passengerfile.json` file to the root of your repository. In this
-file you can specify a number of NGINX options as listed in this document:
-https://www.phusionpassenger.com/documentation/Users%20guide%20Standalone.html#config_file
-
-Second, if the few options that can be provided in `Passengerfile.json` is not
-sufficient, you can provide your own nginx template. Add the following to the
-json dictionary in `Passengerfile.json`:
-
-    "nginx_config_template": "nginx.conf"
-
-Then create the file `nginx.conf` in the root of your repository with whatever
-NGINX configuration you require.
+# Scalable Internet Services Utility Script
 
 # scalable_admin.py
 
@@ -147,14 +62,6 @@ Subsequent runs can be used to make updates to a team's permissions. This is
 only necessary if the permission settings have been modified in the
 `scalable_admin.py` file.
 
-### scalable_admin aws-cleanup
-
-This command will delete stacks that are more than 8 hours old. It is useful to
-run this as a cron job. The following crontab entry will run this command every
-hour on the 31st minute:
-
-    31 * * * * /path/to/the/script/utils/scalable_admin.py aws-cleanup
-
 ### scalable_admin aws-purge TEAM...
 
 Use this command to completely remove one or more teams' permissions. This
@@ -167,46 +74,12 @@ Use this command to update the permissions for all teams. The list of teams is
 dynamically determined from the security group names excluding those that begin
 with `default`.
 
-### scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
-
-This command will generate a cloud formation template usable by any of the
-teams configured via `scalable_admin.py aws TEAM...`. On success, the S3 url to
-the generated cloudformation template will be output. The templates will be
-stored in `S3_BUCKET`.
-
-__Note__: Regenerating templates will overwrite existing templates. Hence, by
-default, template names (before the `.json` extension) are suffixed with
-`Test`. When you are sure you want to replace the _production_ template, use
-the `--no-test` option when generating the template.
-
-By default all EC2 instances use the Amazon Linux AMI corresponding to their
-region and instance type as specified in `CFTemplate.DEFAULT_AMIS`. These
-values should be updated as Amazon releases newer versions of the AMI.
-
-The `--multi` flag is used to generate a cloudformation template utilizing a
-load balancer to distribute requests to 1 to 8 app EC2 instances, backed by an
-RDS database instance. When `--multi` is not not provided, the cloudformation
-template will result in a stack that runs on a single EC2 instance.
-
-By default app instances that are served via _passenger-standalone_. The
-`--puma` option can be provided to use Puma as the application server.
-
-The `--memached` flag will add memcached to the stack. When used in combination
-with `--multi`, memcached will run on its own instance, otherwise it'll share
-the same EC2 instance with the app server and database.
-
-### scalable_admin cftemplate tsung [--no-test]
+### scalable_admin tsung-template [--no-test]
 
 Generate a cloudformation template to generate stacks that run the load testing
-tool funkload. The `--no-test` flag works as described above.
+tool tsung. The `--no-test` flag works as described above.
 
-### scalable_admin cftemplate-update-all [--no-test]
-
-Update all permutations of the application server stacks (not tsung). This is
-useful to quickly change the allowable instance types, or to make any changes
-that should apply to all app-server templates.
-
-### scalable_admin gh TEAM USER...
+### scalable_admin github TEAM USER...
 
 Use this command to create a git repository, if it does not already exist, and
 add invite list of github USERs to the repository if they have not already been

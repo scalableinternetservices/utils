@@ -1,25 +1,25 @@
 """Scalable Admin is a helps administrate teams' access to github and aws."""
-
 from __future__ import print_function
 from copy import deepcopy
-from datetime import datetime, timedelta
-from pkg_resources import resource_string
 from os import chmod
 from pprint import pprint
 from string import Formatter
 from sys import stderr
+import json
+
+from pkg_resources import resource_string
 import botocore.exceptions
 import botocore.session
-import json
+
 from . import const
-from .helper import (UTC, generate_password)
+from .helper import generate_password
 
 
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
     @staticmethod
-    def op(method, debug_output=True, **kwargs):
+    def exec(method, debug_output=True, **kwargs):
         """Execute an AWS operation and check the response status."""
         try:
             response = method(**kwargs)
@@ -80,21 +80,11 @@ class AWS(object):
 
     def az_to_subnet(self):
         """Return a mapping of availability zone to their subnet."""
-        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
-        subnets = self.op(self.ec2.describe_subnets, Filters=[
+        vpc = self.exec(self.ec2.describe_vpcs)['Vpcs'][0]
+        subnets = self.exec(self.ec2.describe_subnets, Filters=[
             {'Name': 'vpc-id', 'Values': [vpc['VpcId']]}])['Subnets']
         return {x['AvailabilityZone']: {'subnet': x['SubnetId']}
                 for x in subnets}
-
-    def cleanup(self):
-        """Clean up old stacks and EC2 instances."""
-        cloud = self.aws.create_client('cloudformation', self.region)
-        now = datetime.now(UTC())
-        for stack in self.op(cloud.list_stacks, False)['StackSummaries']:
-            if stack['StackStatus'] in {'DELETE_COMPLETE'}:
-                continue
-            if now - stack['CreationTime'] > timedelta(minutes=290):
-                self.op(cloud.delete_stack, StackName=stack['StackName'])
 
     def configure(self, team):
         """Create account and configure settings for a team.
@@ -114,26 +104,26 @@ class AWS(object):
             'Action': 'sts:AssumeRole',
             'Effect': 'Allow',
             'Principal': {'Service': 'ec2.amazonaws.com'}}}
-        self.op(self.iam.create_instance_profile, InstanceProfileName=team)
-        self.op(self.iam.create_role, RoleName=team,
-                AssumeRolePolicyDocument=json.dumps(role_policy))
-        self.op(self.iam.add_role_to_instance_profile, RoleName=team,
-                InstanceProfileName=team)
-        self.op(self.iam.put_role_policy, RoleName=team, PolicyName=team,
-                PolicyDocument=json.dumps({'Statement': s3_statement}))
+        self.exec(self.iam.create_instance_profile, InstanceProfileName=team)
+        self.exec(self.iam.create_role, RoleName=team,
+                  AssumeRolePolicyDocument=json.dumps(role_policy))
+        self.exec(self.iam.add_role_to_instance_profile, RoleName=team,
+                  InstanceProfileName=team)
+        self.exec(self.iam.put_role_policy, RoleName=team, PolicyName=team,
+                  PolicyDocument=json.dumps({'Statement': s3_statement}))
 
         # Create IAM group if it does not exist
-        self.op(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
-        self.op(self.iam.put_group_policy, GroupName=const.IAM_GROUP_NAME,
-                PolicyName=const.IAM_GROUP_NAME,
-                PolicyDocument=json.dumps(self.policy))
+        self.exec(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
+        self.exec(self.iam.put_group_policy, GroupName=const.IAM_GROUP_NAME,
+                  PolicyName=const.IAM_GROUP_NAME,
+                  PolicyDocument=json.dumps(self.policy))
 
         # Configure user account / password / access keys / keypair
-        if self.op(self.iam.create_user, UserName=team):
+        if self.exec(self.iam.create_user, UserName=team):
             password = generate_password()
-            self.op(self.iam.create_login_profile, UserName=team,
-                    Password=password)
-            data = self.op(self.iam.create_access_key, UserName=team)
+            self.exec(self.iam.create_login_profile, UserName=team,
+                      Password=password)
+            data = self.exec(self.iam.create_access_key, UserName=team)
             if data:
                 filename = '{0}.txt'.format(team)
                 with open(filename, 'w') as fp:
@@ -146,24 +136,24 @@ class AWS(object):
                     fp.write('SecretKey: {0}\n'
                              .format(data['AccessKey']['SecretAccessKey']))
                 print('Login and key info saved as: {0}'.format(filename))
-            data = self.op(self.ec2.create_key_pair, KeyName=team)
+            data = self.exec(self.ec2.create_key_pair, KeyName=team)
             if data:
                 filename = '{0}.pem'.format(team)
-                with open(filename, 'w') as fd:
+                with open(filename, 'w') as file_descriptor:
                     chmod(filename, 0o600)
-                    fd.write(data['KeyMaterial'])
+                    file_descriptor.write(data['KeyMaterial'])
                 print('Keypair saved as: {0}'.format(filename))
-        self.op(self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME,
-                UserName=team)
+        self.exec(self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME,
+                  UserName=team)
 
         # Configure security groups
-        vpc = self.op(self.ec2.describe_vpcs)['Vpcs'][0]
-        retval = self.op(self.ec2.create_security_group, GroupName=team,
-                         Description=team, VpcId=vpc['VpcId'])
+        vpc = self.exec(self.ec2.describe_vpcs)['Vpcs'][0]
+        retval = self.exec(self.ec2.create_security_group, GroupName=team,
+                           Description=team, VpcId=vpc['VpcId'])
         if retval:
             group_id = retval['GroupId']
         else:
-            group_id = self.op(
+            group_id = self.exec(
                 self.ec2.describe_security_groups,
                 Filters=[{'Name': 'group-name', 'Values': [team]}]
             )['SecurityGroups'][0]['GroupId']
@@ -173,19 +163,20 @@ class AWS(object):
             # prevent the creation of the others.
             rule = {'IpProtocol': 'tcp', 'FromPort': port, 'ToPort': port,
                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
-            self.op(self.ec2.authorize_security_group_ingress,
-                    GroupId=group_id, IpPermissions=[rule])
+            self.exec(self.ec2.authorize_security_group_ingress,
+                      GroupId=group_id, IpPermissions=[rule])
 
         # Create RDS Subgroups
         subnets = [x['subnet'] for x in self.az_to_subnet().values()]
-        self.op(self.rds.create_db_subnet_group, DBSubnetGroupDescription=team,
-                DBSubnetGroupName=team, SubnetIds=subnets)
+        self.exec(self.rds.create_db_subnet_group,
+                  DBSubnetGroupDescription=team, DBSubnetGroupName=team,
+                  SubnetIds=subnets)
 
         # Permit all instances in the SecurityGroup to talk to each other
-        self.op(self.ec2.authorize_security_group_ingress, GroupId=group_id,
-                IpPermissions=[
-                    {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
-                     'UserIdGroupPairs': [{'GroupId': group_id}]}])
+        self.exec(self.ec2.authorize_security_group_ingress, GroupId=group_id,
+                  IpPermissions=[
+                      {'IpProtocol': '-1', 'FromPort': 0, 'ToPort': 65535,
+                       'UserIdGroupPairs': [{'GroupId': group_id}]}])
 
         policy = {'Statement': []}
         # State-based policies
@@ -254,15 +245,15 @@ class AWS(object):
                           AWS.arnrdssub.format('{0}'.format(team).lower())]})
 
         # Create and associate TEAM group (can have longer policy lists)
-        self.op(self.iam.create_group, GroupName=team)
-        self.op(self.iam.put_group_policy, GroupName=team, PolicyName=team,
-                PolicyDocument=json.dumps(policy))
-        self.op(self.iam.add_user_to_group, GroupName=team, UserName=team)
+        self.exec(self.iam.create_group, GroupName=team)
+        self.exec(self.iam.put_group_policy, GroupName=team, PolicyName=team,
+                  PolicyDocument=json.dumps(policy))
+        self.exec(self.iam.add_user_to_group, GroupName=team, UserName=team)
         return 0
 
     def team_to_security_group(self):
         """Return a mapping of teams to their security groups."""
-        data = self.op(self.ec2.describe_security_groups, debug_output=False)
+        data = self.exec(self.ec2.describe_security_groups, debug_output=False)
         return {x['GroupName']: {'sg': x['GroupId']} for x in
                 data['SecurityGroups']
                 if not x['GroupName'].startswith('default')}
@@ -270,40 +261,40 @@ class AWS(object):
     def purge(self, team):
         """Remove all settings pertaining to `team`."""
         # Remove IAM Role
-        self.op(self.iam.remove_role_from_instance_profile, RoleName=team,
-                InstanceProfileName=team)
-        self.op(self.iam.delete_role_policy, RoleName=team,
-                PolicyName=team)
-        self.op(self.iam.delete_role, RoleName=team)
+        self.exec(self.iam.remove_role_from_instance_profile, RoleName=team,
+                  InstanceProfileName=team)
+        self.exec(self.iam.delete_role_policy, RoleName=team,
+                  PolicyName=team)
+        self.exec(self.iam.delete_role, RoleName=team)
         # Remove IAM User and Group
-        self.op(self.iam.delete_login_profile, UserName=team)
-        resp = self.op(self.iam.list_access_keys, UserName=team)
+        self.exec(self.iam.delete_login_profile, UserName=team)
+        resp = self.exec(self.iam.list_access_keys, UserName=team)
         if resp:
             for keydata in resp['AccessKeyMetadata']:
-                self.op(self.iam.delete_access_key, UserName=team,
-                        AccessKeyId=keydata['AccessKeyId'])
+                self.exec(self.iam.delete_access_key, UserName=team,
+                          AccessKeyId=keydata['AccessKeyId'])
         # Remove user from groups
-        group_response = self.op(self.iam.list_groups_for_user, UserName=team)
+        group_response = self.exec(self.iam.list_groups_for_user, UserName=team)
         groups = group_response['Groups'] if group_response else []
         for group in groups:
             group_name = group['GroupName']
-            self.op(self.iam.remove_user_from_group, GroupName=group_name,
-                    UserName=team)
-            if not self.op(self.iam.get_group, GroupName=group_name)['Users']:
+            self.exec(self.iam.remove_user_from_group, GroupName=group_name,
+                      UserName=team)
+            if not self.exec(self.iam.get_group, GroupName=group_name)['Users']:
                 # Delete group
-                self.op(self.iam.delete_group_policy, GroupName=group_name,
-                        PolicyName=group_name)
-                self.op(self.iam.delete_group, GroupName=group_name)
-        self.op(self.iam.delete_user, UserName=team)
-        self.op(self.ec2.delete_key_pair, KeyName=team)
+                self.exec(self.iam.delete_group_policy, GroupName=group_name,
+                          PolicyName=group_name)
+                self.exec(self.iam.delete_group, GroupName=group_name)
+        self.exec(self.iam.delete_user, UserName=team)
+        self.exec(self.ec2.delete_key_pair, KeyName=team)
 
-        group_id = self.op(
+        group_id = self.exec(
             self.ec2.describe_security_groups,
             Filters=[{'Name': 'group-name', 'Values': [team]}]
         )['SecurityGroups'][0]['GroupId']
-        self.op(self.iam.delete_instance_profile, InstanceProfileName=team)
-        self.op(self.ec2.delete_security_group, GroupId=group_id)
-        self.op(self.rds.delete_db_subnet_group, DBSubnetGroupName=team)
+        self.exec(self.iam.delete_instance_profile, InstanceProfileName=team)
+        self.exec(self.ec2.delete_security_group, GroupId=group_id)
+        self.exec(self.rds.delete_db_subnet_group, DBSubnetGroupName=team)
         return 0
 
     def verify_template(self, template, upload=None):
@@ -316,15 +307,16 @@ class AWS(object):
             accessible, but it will work for CloudFormation Stack generation.
         """
         cloud = self.aws.create_client('cloudformation', self.region)
-        valid = bool(self.op(cloud.validate_template, TemplateBody=template,
-                             debug_output=False))
+        valid = bool(self.exec(cloud.validate_template, TemplateBody=template,
+                               debug_output=False))
         if not valid or upload is None:
             return valid
         # Upload to s3
         bucket, key = upload
-        s3 = self.aws.create_client('s3', None)
-        retval = self.op(s3.put_object, Bucket=bucket, Key=key, Body=template,
-                         ACL='public-read', debug_output=False)
+        s3_client = self.aws.create_client('s3', None)
+        retval = self.exec(s3_client.put_object, Bucket=bucket, Key=key,
+                           Body=template, ACL='public-read',
+                           debug_output=False)
 
         if not retval:
             return retval
@@ -412,7 +404,7 @@ class CFTemplate(object):
         """
         self.memcached = self.multi = self.name = self.puma = None
         self.ami = 'ami-f62afe8e'
-        self.create_timeout = 16  # Minutes
+        self.create_timeout = 3  # Minutes
         self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
@@ -486,22 +478,12 @@ class CFTemplate(object):
         self.template['Outputs'][name] = {'Description': description,
                                           'Value': value}
 
-    def add_parameter(self, name, ptype='String', allowed=None, default=None,
-                      description=None, error_msg=None, maxv=None, minv=None):
+    def add_parameter(self, name, allowed, description, default=None):
         """Add a template parameter."""
-        param = {'Type': ptype}
-        if allowed:
-            param['AllowedValues'] = allowed
+        param = {'AllowedValues': allowed, 'Description': description,
+                 'Type': 'String'}
         if default:
             param['Default'] = default
-        if description:
-            param['Description'] = description
-        if error_msg:
-            param['ConstraintDescription'] = error_msg
-        if maxv:
-            param['MaxValue'] = maxv
-        if minv:
-            param['MinValue'] = minv
         self.template['Parameters'][name] = param
 
     def add_ssh_output(self, resource_name='AppServer'):
@@ -511,110 +493,6 @@ class CFTemplate(object):
                                   '.pem ec2-user@',
                                   self.get_att(resource_name, 'PublicIp')))
 
-    def callback_stack(self):
-        """Update the template parameters for the stack."""
-        self.add_parameter('Branch', default='master',
-                           description='The git branch to deploy.')
-
-        if self.puma:
-            self.add_parameter('ProcessParallelism', default='1',
-                               description='The number of worker processes.')
-            self.add_parameter('ThreadParallelism', default='1',
-                               description=('The number of threads within each'
-                                            ' worker processes.'))
-            self.add_parameter('RubyVM', default='MRI',
-                               allowed=['MRI', 'JRuby'],
-                               description=('The number of threads within each'
-                                            ' worker processes.'))
-
-        if self.multi:
-            instances = self.multi_instance_filter(const.EC2_INSTANCE_TYPES)
-            url = self.get_att('LoadBalancer', 'DNSName')
-            self.add_parameter('AppInstances', allowed=range(1, 9), default=2,
-                               description=('The number of AppServer instances'
-                                            ' to launch.'))
-            self.add_parameter('DBInstanceType',
-                               allowed=const.RDB_INSTANCE_TYPES,
-                               default=const.RDB_INSTANCE_TYPES[0],
-                               description='The Database instance type.')
-            self.template['Resources']['AppGroup'] = {
-                'CreationPolicy': {'ResourceSignal': {
-                    'Count': self.get_ref('AppInstances'),
-                    'Timeout': self.timeout(self.create_timeout * 3 / 2)}},
-                'Properties': {
-                    'LaunchConfigurationName':
-                    self.get_ref('AppServer'),
-                    'LoadBalancerNames': [self.get_ref('LoadBalancer')],
-                    'MaxSize': self.get_ref('AppInstances'),
-                    'MinSize': self.get_ref('AppInstances'),
-                    'VPCZoneIdentifier': self.subnets},
-                'Type': 'AWS::AutoScaling::AutoScalingGroup'}
-            self.template['Resources']['Database'] = {
-                'Properties': {
-                    'AllocatedStorage': 5,
-                    'BackupRetentionPeriod': 0,
-                    'DBInstanceClass': self.get_ref('DBInstanceType'),
-                    'DBInstanceIdentifier': self.get_ref('AWS::StackName'),
-                    'DBName': 'rails_app',
-                    'DBSubnetGroupName': self.get_ref('TeamName'),
-                    'Engine': 'mysql',
-                    'MasterUsername': 'root',
-                    'MasterUserPassword': 'password',
-                    'VPCSecurityGroups': [self.get_map(
-                        'Teams', self.get_ref('TeamName'), 'sg')]},
-                'Type': 'AWS::RDS::DBInstance'}
-            self.template['Resources']['LoadBalancer'] = {
-                'Properties': {
-                    'LBCookieStickinessPolicy': [
-                        {'PolicyName': 'CookiePolicy',
-                         'CookieExpirationPeriod': 30}],
-                    'LoadBalancerName': self.get_ref('AWS::StackName'),
-                    'Listeners': [{'InstancePort': 3000,
-                                   'LoadBalancerPort': 80,
-                                   'PolicyNames': ['CookiePolicy'],
-                                   'Protocol': 'http'}],
-                    'SecurityGroups': [self.get_map(
-                        'Teams', self.get_ref('TeamName'), 'sg')],
-                    'Subnets': self.subnets},
-                'Type': 'AWS::ElasticLoadBalancing::LoadBalancer'}
-            if self.memcached:
-                self.add_parameter('MemcachedInstanceType',
-                                   allowed=instances, default=instances[0],
-                                   description='The memcached instance type.')
-                # Memcached EC2 Instance
-                sections = ['preamble', 'postamble']
-                userdata = self.join(*(
-                    item for section in sections for item in self.join_format(
-                        self.segment(section)
-                        .replace('%%RESOURCE%%', 'Memcached')
-                        .replace('AppServer', 'Memcached'))))
-                self.template['Resources']['Memcached'] = {
-                    'CreationPolicy': {'ResourceSignal': {'Timeout': 'PT5M'}},
-                    'Metadata': {'AWS::CloudFormation::Init': {
-                        'config': {
-                            'packages': {'yum': {'memcached': []}},
-                            'services': {'sysvinit':
-                                         {'memcached': self.ENABLE_PARAM}}}}},
-                    'Properties': {
-                        'IamInstanceProfile': self.get_ref('TeamName'),
-                        'ImageId': self.get_map(
-                            'AMIs', self.get_ref('MemcachedInstanceType'),
-                            'ami'),
-                        'InstanceType': self.get_ref('MemcachedInstanceType'),
-                        'KeyName': self.get_ref('TeamName'),
-                        'SecurityGroupIds': [self.get_map(
-                            'Teams', self.get_ref('TeamName'), 'sg')],
-                        'SubnetId': self.default_subnet,
-                        'UserData': {'Fn::Base64': userdata}},
-                    'Type': 'AWS::EC2::Instance'}
-                self.add_ssh_output('Memcached')
-        else:
-            url = self.get_att('AppServer', 'PublicIp')
-            self.add_ssh_output()
-        self.add_output('URL', 'The URL to the rails application.',
-                        self.join('http://', url))
-        self.add_apps()
-
     def callback_tsung(self):
         """Update the template parameters for a tsung instance."""
         appserver = self.template['Resources']['AppServer']
@@ -623,66 +501,6 @@ class CFTemplate(object):
         appserver['Properties']['SecurityGroupIds'] = [self.get_map(
             'Teams', self.get_ref('TeamName'), 'sg')]
         appserver['Properties']['SubnetId'] = self.default_subnet
-
-    def generate_stack(self, app_ami, memcached, multi, puma):
-        """Output the generated AWS cloudformation template.
-
-        :param app_ami: (str) The AMI to use for the app server instance(s).
-        :param memcached: (boolean) Template specifies the installation of
-            memcached.
-        :param multi: (boolean) Template moves the database to its own RDB
-            instance, permits a variable number of app server instances, and
-            distributes load to those instances via ELB.
-        :param puma: (boolean) Use puma instead of passenger.
-
-        Passenger standalone (uses nginx) will be used as the default
-        application sever if puma is not specified.
-
-        """
-        # Update stack specific instance variables
-        if app_ami:
-            self.ami = app_ami
-        self.memcached = memcached
-        self.multi = multi
-        self.puma = puma
-        self.yum_packages = const.SERVER_YUM_PACKAGES['stack']
-        if not multi:
-            self.yum_packages.add('mysql-server')
-            if memcached:
-                self.yum_packages.add('memcached')
-        if not (puma or app_ami):
-            self.yum_packages |= const.SERVER_YUM_PACKAGES['passenger']
-
-        name_parts = []
-        # Identify stack plurality
-        name_parts.append('Multi' if multi else 'Single')
-        # Identify AppServer
-        name_parts.append('Puma' if puma else 'Passenger')
-        # Identify Addons
-        if memcached:
-            name_parts.append('Memcached')
-        if app_ami:
-            name_parts.append('-' + app_ami)
-        # Create name
-        self.name = ''.join(name_parts)
-
-        sections = ['preamble', 'ruby', 'rails']
-        if self.memcached:
-            sections.append('memcached_install')
-            if self.multi:
-                sections.append('memcached_configure_multi')
-            else:
-                sections.append('memcached_configure_single')
-        if puma:
-            sections.append('puma')
-        else:
-            sections.append('passenger')
-        sections.append('postamble')
-
-        resource = 'AppGroup' if self.multi else 'AppServer'
-        instance_filter = self.multi_instance_filter if self.multi else None
-        return self.create_template(sections, resource, self.callback_stack,
-                                    instance_filter)
 
     def create_template(self, sections, resource, callback=None,
                         instance_filter=None):
@@ -736,9 +554,8 @@ class CFTemplate(object):
             if isinstance(self, bool):
                 print(template)
                 return 1
-            else:
-                print(tmp)
-                return 0
+            print(tmp)
+            return 0
         return 1
 
     def generate_tsung(self):

@@ -1,24 +1,11 @@
 """Defines one-off helpers used throughout the module."""
-
 from __future__ import print_function
-from datetime import timedelta, tzinfo
 from json import load
 from os.path import expanduser, isfile
 from random import choice
 from sys import stderr
 from string import ascii_letters, digits
 from . import const
-
-
-class UTC(tzinfo):
-    """Specify the UTC timezone.
-
-    From: http://docs.python.org/release/2.4.2/lib/datetime-tzinfo.html
-    """
-
-    dst = lambda x, y: timedelta(0)  # NOQA
-    tzname = lambda x, y: 'UTC'  # NOQA
-    utcoffset = lambda x, y: timedelta(0)  # NOQA
 
 
 def generate_password(length=16):
@@ -31,7 +18,7 @@ def generate_password(length=16):
     return selection
 
 
-def parse_config(AWS):
+def parse_config(aws):
     """Parse the configuation file and set the necessary state."""
     config_path = expanduser('~/.config/scalable_admin.json')
     if not isfile(config_path):
@@ -50,6 +37,6 @@ def parse_config(AWS):
     if error:
         exit(1)
 
-    AWS.set_class_variables(config['aws_region'])
+    aws.set_class_variables(config['aws_region'])
     const.GH_ORGANIZATION = config['github_organization']
     const.S3_BUCKET = config['s3_bucket']

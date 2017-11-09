@@ -2,13 +2,10 @@
 
 Usage:
   scalable_admin aws TEAM...
-  scalable_admin aws-cleanup
   scalable_admin aws-purge TEAM...
   scalable_admin aws-update-all
-  scalable_admin cftemplate [--no-test] [--multi] [--memcached] [--puma]
-  scalable_admin cftemplate tsung [--no-test]
-  scalable_admin cftemplate-update-all [--no-test]
-  scalable_admin gh TEAM USER...
+  scalable_admin tsung-template [--no-test]
+  scalable_admin github TEAM USER...
 
 -h --help  show this message
 """
@@ -40,11 +37,6 @@ def cmd_aws(args):
     return 0
 
 
-def cmd_aws_cleanup(_):
-    """Handle the aws-cleanup command."""
-    return AWS().cleanup()
-
-
 def cmd_aws_purge(args):
     """Handle the aws-purge command."""
     for team in args['TEAM']:
@@ -64,32 +56,14 @@ def cmd_aws_update_all(_):
     return 0
 
 
-def cmd_cftemplate(args):
-    """Handle the cftemplate command."""
-    cf = CFTemplate(test=not args['--no-test'])
-    if args['tsung']:
-        return cf.generate_tsung()
-    return cf.generate_stack(app_ami=None,
-                             memcached=args['--memcached'],
-                             multi=args['--multi'], puma=args['--puma'])
+def cmd_tsung_template(args):
+    """Handle the tsung-template command."""
+    cloud_formation = CFTemplate(test=not args['--no-test'])
+    return cloud_formation.generate_tsung()
 
 
-def cmd_cftemplate_update_all(args):
-    """Handle the cftemplate-update-all command."""
-    bit_pos = ['memcached', 'puma', 'multi']
-    for i in range(2 ** len(bit_pos)):
-        kwargs = {'app_ami': None}
-        for bit, argument in enumerate(bit_pos):
-            kwargs[argument] = bool(i & 2 ** bit)
-        cf = CFTemplate(test=not args['--no-test'])
-        retval = cf.generate_stack(**kwargs)
-        if retval:
-            return retval
-    return 0
-
-
-def cmd_gh(args):
-    """Handle the gh command."""
+def cmd_github(args):
+    """Handle the github command."""
     team = args['TEAM']
     team = team[0] if isinstance(team, list) else team
     return configure_github_team(team_name=team, user_names=args['USER'])
@@ -103,12 +77,10 @@ def main():
     clean_team_names(args)
 
     commands = {'aws': cmd_aws,
-                'aws-cleanup': cmd_aws_cleanup,
                 'aws-purge': cmd_aws_purge,
                 'aws-update-all': cmd_aws_update_all,
-                'cftemplate': cmd_cftemplate,
-                'cftemplate-update-all': cmd_cftemplate_update_all,
-                'gh': cmd_gh}
+                'tsung-template': cmd_tsung_template,
+                'github': cmd_github}
 
     for command_name in commands:
         if args[command_name]:
