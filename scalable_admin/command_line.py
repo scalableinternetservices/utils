@@ -20,13 +20,15 @@ from .helper import parse_config
 
 
 def clean_team_names(args):
-    """Replace spaces with hyphens in team names."""
+    """Replace spaces and underscores with hyphens in team names."""
     if args['TEAM']:
         if isinstance(args['TEAM'], list):
             for i, item in enumerate(args['TEAM']):
-                args['TEAM'][i] = item.strip().replace(' ', '-')
+                item = item.strip().replace(' ', '-')
+                args['TEAM'][i] = item.replace('_', '-')
         else:
             args['TEAM'] = args['TEAM'].strip().replace(' ', '-')
+            args['TEAM'] = args['TEAM'].replace('_', '-')
 
 
 def cmd_aws(args):

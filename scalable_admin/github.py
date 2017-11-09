@@ -63,7 +63,7 @@ def get_github_token():
         stdout.flush()
         return stdin.readline().strip()
 
-    user = raw_input("Github admin username: ")
+    user = input("Github admin username: ")
     auth = authorize(user, getpass('Password for {0}: '.format(user)),
                      ['public_repo', 'admin:org'],
                      'Scalable Internet Services Create Repo Script {0}'

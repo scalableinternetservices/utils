@@ -3,7 +3,7 @@
 from __future__ import print_function
 from copy import deepcopy
 from datetime import datetime, timedelta
-from pkg_resources import resource_stream
+from pkg_resources import resource_string
 from os import chmod
 from pprint import pprint
 from string import Formatter
@@ -24,11 +24,9 @@ class AWS(object):
         try:
             response = method(**kwargs)
         except botocore.exceptions.ClientError as exc:
-            stderr.write(exc.message)
+            stderr.write(exc.response['Error']['Message'])
             stderr.write('\n')
             return False
-        except:
-            raise
         if debug_output:
             stderr.write('Success: {0} {1}\n'.format(method.__name__, kwargs))
         return response
@@ -386,13 +384,14 @@ class CFTemplate(object):
 
     @staticmethod
     def tsung_instance_filter(instances):
-        """Filter out anything but m3 instance types."""
-        return [x for x in instances if x.startswith('m3')]
+        """Filter out anything but mX instance types."""
+        return [x for x in instances if x.startswith('m')]
 
     @classmethod
     def segment(cls, name):
         """Return the contents of the segment named `name`.sh."""
-        return resource_stream(__name__, 'segments/{0}.sh'.format(name)).read()
+        return (resource_string(__name__, 'segments/{0}.sh'.format(name))
+                .decode('utf-8'))
 
     @classmethod
     def subnet_map(cls):
@@ -411,22 +410,13 @@ class CFTemplate(object):
 
         :param test: When true, append 'Test' to generated template name.
         """
-        self.ami = self.memcached = self.multi = self.name = self.puma = None
+        self.memcached = self.multi = self.name = self.puma = None
+        self.ami = 'ami-f62afe8e'
         self.create_timeout = 16  # Minutes
         self.template = deepcopy(self.TEMPLATE)
         self.test = test
         self.yum_packages = None
         self._team_map = None
-
-    @property
-    def ami_map(self):
-        """Return a mapping of instance type to their AMI."""
-        def ami_type(instance_type):
-            """Return the AMI for a particular instance type."""
-            return {'t2.micro': 'ebs'}.get(instance_type, 'instance')
-
-        return {x: {'ami': const.REGION_AMIS[AWS.region][ami_type(x)]} for x in
-                const.EC2_INSTANCE_TYPES}
 
     @property
     def default_subnet(self):
@@ -712,8 +702,7 @@ class CFTemplate(object):
                 'packages': {
                     'packages': {'yum': {x: [] for x in self.yum_packages}}}}},
             'Properties': {'IamInstanceProfile': self.get_ref('TeamName'),
-                           'ImageId': self.ami if self.ami else self.get_map(
-                               'AMIs', self.get_ref('AppInstanceType'), 'ami'),
+                           'ImageId': self.ami,
                            'InstanceType': self.get_ref('AppInstanceType'),
                            'KeyName': self.get_ref('TeamName'),
                            'UserData': {'Fn::Base64': userdata}},
@@ -730,8 +719,7 @@ class CFTemplate(object):
         self.add_parameter('TeamName', allowed=sorted(self.team_map.keys()),
                            description='Your team name.')
 
-        self.template['Mappings'] = {'AMIs': self.ami_map,
-                                     'SpotPrices': self.spot_pricing_map,
+        self.template['Mappings'] = {'SpotPrices': self.spot_pricing_map,
                                      'Subnets': self.subnet_map(),
                                      'Teams': self.team_map}
 

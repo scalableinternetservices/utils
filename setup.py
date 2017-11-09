@@ -24,7 +24,7 @@ setup(name=PACKAGE_NAME,
                    'UCLA.'),
       entry_points={'console_scripts':
                     ['{0}={0}.command_line:main'.format(PACKAGE_NAME)]},
-      install_requires=['botocore >=1.2, <1.4',
+      install_requires=['botocore >=1.7, <2',
                         'docopt >=0.6.2, <1',
                         'github3.py >=1.0.0a2, <1.0.1',
                         'uritemplate.py <3'],
