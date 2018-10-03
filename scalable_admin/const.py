@@ -37,5 +37,6 @@ SERVER_YUM_PACKAGES = {'passenger': {'libcurl-devel', 'openssl-devel',
 
 
 # The following globals are set via `parse_config`
+GH_ARCHIVE_ORGANIZATION = None
 GH_ORGANIZATION = None
 S3_BUCKET = None

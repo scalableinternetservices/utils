@@ -38,5 +38,6 @@ def parse_config(aws):
         exit(1)
 
     aws.set_class_variables(config['aws_region'])
+    const.GH_ARCHIVE_ORGANIZATION = config['github_archive_organization']
     const.GH_ORGANIZATION = config['github_organization']
     const.S3_BUCKET = config['s3_bucket']

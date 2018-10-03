@@ -8,6 +8,14 @@ from sys import stdin, stdout
 from . import const
 
 
+def archive_projects():
+    """Set archive flag on all projects in archive repo."""
+    organization = github_authenticate_with_org(const.GH_ARCHIVE_ORGANIZATION)
+    for repository in organization.repositories():
+        if not repository.archived:
+            repository.edit(repository.name, archived=True)
+
+
 def configure_github_team(team_name, user_names):
     """Create team and team repository and add users to the team on Github."""
     print("""About to create:
@@ -75,7 +83,7 @@ def get_github_token():
     return auth.token, auth.id
 
 
-def github_authenticate_with_org():
+def github_authenticate_with_org(organization=const.GH_ORGANIZATION):
     """Authenticate to github and return the desired organization handle."""
     from github3 import GitHubError, login
 
@@ -83,7 +91,7 @@ def github_authenticate_with_org():
         gh_token, _ = get_github_token()
         github = login(token=gh_token)
         try:  # Test login
-            return github.membership_in(const.GH_ORGANIZATION).organization
+            return github.membership_in(organization).organization
         except GitHubError as exc:
             if exc.code != 401:  # Bad Credentials
                 raise

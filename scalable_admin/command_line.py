@@ -6,13 +6,14 @@ Usage:
   scalable_admin aws-update-all
   scalable_admin tsung-template [--no-test]
   scalable_admin github TEAM USER...
+  scalable_admin github-archive
 
 -h --help  show this message
 """
 from __future__ import print_function
 from docopt import docopt
 from . import AWS, CFTemplate
-from .github import configure_github_team
+from .github import archive_projects, configure_github_team
 from .helper import parse_config
 
 
@@ -69,6 +70,10 @@ def cmd_github(args):
     return configure_github_team(team_name=team, user_names=args['USER'])
 
 
+def cmd_github_archive(_):
+    return archive_projects()
+
+
 def main():
     """Provide the entrance point for the scalable_admin command."""
     args = docopt(__doc__)
@@ -80,7 +85,8 @@ def main():
                 'aws-purge': cmd_aws_purge,
                 'aws-update-all': cmd_aws_update_all,
                 'tsung-template': cmd_tsung_template,
-                'github': cmd_github}
+                'github': cmd_github,
+                'github-archive': cmd_github_archive}
 
     for command_name in commands:
         if args[command_name]:
