@@ -27,7 +27,7 @@ def configure_github_team(team_name, user_names):
         print('Aborting')
         return 1
 
-    org = github_authenticate_with_org()
+    org = github_authenticate_with_org(const.GH_ORGANIZATION)
 
     team = None  # Fetch or create team
     for iteam in org.teams():
@@ -83,7 +83,7 @@ def get_github_token():
     return auth.token, auth.id
 
 
-def github_authenticate_with_org(organization=const.GH_ORGANIZATION):
+def github_authenticate_with_org(organization):
     """Authenticate to github and return the desired organization handle."""
     from github3 import GitHubError, login
 
