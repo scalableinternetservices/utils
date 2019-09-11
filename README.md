@@ -47,7 +47,7 @@ Below is an example of the contents of the json file:
 "aws_region": "us-west-2",
 "github_organization": "scalableinternetservices",
 "github_archive_organization": "scalableinternetservicesarchive",
-"s3_bucket": "ucla_cs188_fall_2019"
+"s3_bucket": "ucla-cs188-fall-2019"
 }
 ```
 
