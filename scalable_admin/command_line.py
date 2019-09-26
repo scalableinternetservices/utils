@@ -4,7 +4,6 @@ Usage:
   scalable_admin aws TEAM...
   scalable_admin aws-purge TEAM...
   scalable_admin aws-update-all
-  scalable_admin tsung-template [--no-test]
   scalable_admin github TEAM USER...
   scalable_admin github-archive
 
@@ -12,7 +11,7 @@ Usage:
 """
 from __future__ import print_function
 from docopt import docopt
-from . import AWS, CFTemplate
+from . import AWS
 from .github import archive_projects, configure_github_team
 from .helper import parse_config
 
@@ -57,12 +56,6 @@ def cmd_aws_update_all(_):
     return 0
 
 
-def cmd_tsung_template(args):
-    """Handle the tsung-template command."""
-    cloud_formation = CFTemplate(test=not args['--no-test'])
-    return cloud_formation.generate_tsung()
-
-
 def cmd_github(args):
     """Handle the github command."""
     team = args['TEAM']
@@ -84,7 +77,6 @@ def main():
     commands = {'aws': cmd_aws,
                 'aws-purge': cmd_aws_purge,
                 'aws-update-all': cmd_aws_update_all,
-                'tsung-template': cmd_tsung_template,
                 'github': cmd_github,
                 'github-archive': cmd_github_archive}
 
