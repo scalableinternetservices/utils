@@ -14,6 +14,7 @@ from .helper import generate_password
 class AWS(object):
     """This class handles AWS administrative tasks."""
 
+    AWS_ACCOUNT_ID = "671946291905"
     REGION = None
 
     @staticmethod
@@ -40,7 +41,45 @@ class AWS(object):
 
         This method can be run subsequent times to apply team updates.
         """
-        # Create IAM group if it does not exist
+        # Create team IAM group if it does not exist
+        self.exec(self.iam.create_group, GroupName=team)
+        self.exec(
+            self.iam.put_group_policy,
+            GroupName=team,
+            PolicyName=team,
+            PolicyDocument=json.dumps(
+                {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "lambda:AddPermission",
+                                "lambda:CreateFunction",
+                                "lambda:DeleteFunction",
+                                "lambda:GetFunction",
+                                "lambda:GetPolicy",
+                                "lambda:InvokeFunction",
+                                "lambda:ListVersionsByFunction",
+                                "lambda:UpdateFunctionCode",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:lambda:{self.REGION}:{self.AWS_ACCOUNT_ID}:function:{team}",
+                        },
+                        {
+                            "Action": ["logs:DescribeLogStreams"],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group:/aws/lambda/{team}:log-stream:",
+                        },
+                        {
+                            "Action": ["logs:GetLogEvents"],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group:/aws/lambda/{team}:log-stream:*",
+                        },
+                    ]
+                }
+            ),
+        )
+
+        # Create class IAM group if it does not exist
         self.exec(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
         self.exec(
             self.iam.put_group_policy,
@@ -50,10 +89,38 @@ class AWS(object):
                 {
                     "Statement": [
                         {
-                            "Action": ["lambda:CreateFunction"],
+                            "Action": [
+                                "apigateway:DELETE",
+                                "apigateway:GET",
+                                "apigateway:POST",
+                                "apigateway:PUT",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:apigateway:{self.REGION}::/restapis*",
+                        },
+                        {
+                            "Action": ["apigateway:GET"],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:apigateway:{self.REGION}::/*",
+                        },
+                        {
+                            "Action": ["iam:PassRole"],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:iam::{self.AWS_ACCOUNT_ID}:role/CS291Lambda",
+                        },
+                        {
+                            "Action": [
+                                "lambda:GetAccountSettings",
+                                "lambda:ListFunctions",
+                            ],
                             "Effect": "Allow",
                             "Resource": "*",
-                        }
+                        },
+                        {
+                            "Action": ["logs:DescribeLogGroups"],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group::log-stream:",
+                        },
                     ]
                 }
             ),
@@ -65,26 +132,38 @@ class AWS(object):
             self.exec(self.iam.create_login_profile, UserName=team, Password=password)
             data = self.exec(self.iam.create_access_key, UserName=team)
             if data:
-                filename = "{0}.txt".format(team)
+                filename = "{0}_web_credentials.txt".format(team)
                 with open(filename, "w") as fp:
+                    fp.write(
+                        "     URL: https://bboe-ucsb.signin.aws.amazon.com/console\n"
+                    )
+                    fp.write("   alias: bboe-ucsb\n")
                     fp.write("Username: {0}\n".format(team))
                     fp.write("Password: {0}\n".format(password))
-                filename = "{0}_key.txt".format(team)
+                filename = "{0}_api_credentials.txt".format(team)
                 with open(filename, "w") as fp:
+                    fp.write("[default]\n")
                     fp.write(
-                        "AccessKey: {0}\n".format(data["AccessKey"]["AccessKeyId"])
+                        f"aws_access_key_id={format(data['AccessKey']['AccessKeyId'])}\n"
                     )
                     fp.write(
-                        "SecretKey: {0}\n".format(data["AccessKey"]["SecretAccessKey"])
+                        f"aws_secret_access_key={data['AccessKey']['SecretAccessKey']}\n\n"
                     )
-                print("Login and key info saved as: {0}".format(filename))
+                    fp.write("[cs291]\n")
+                    fp.write(
+                        f"aws_access_key_id={format(data['AccessKey']['AccessKeyId'])}\n"
+                    )
+                    fp.write(
+                        f"aws_secret_access_key={data['AccessKey']['SecretAccessKey']}\n"
+                    )
             data = self.exec(self.ec2.create_key_pair, KeyName=team)
             if data:
                 filename = "{0}.pem".format(team)
                 with open(filename, "w") as file_descriptor:
                     chmod(filename, 0o600)
                     file_descriptor.write(data["KeyMaterial"])
-                print("Keypair saved as: {0}".format(filename))
+
+        self.exec(self.iam.add_user_to_group, GroupName=team, UserName=team)
         self.exec(
             self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME, UserName=team
         )
