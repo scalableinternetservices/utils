@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-from __future__ import print_function
+#!/usr/bin/env python3
 from datetime import datetime, timedelta, tzinfo
 import botocore.session
 import sys
@@ -48,7 +47,7 @@ def active_databases(rds):
         if instance["DBInstanceStatus"] == "available":
             pass
         elif instance["DBInstanceStatus"] not in ["backing-up", "creating", "deleting"]:
-            print("Unhandled RDS state: {}".format(instance["DBInstanceStatus"]))
+            print(f"Unhandled RDS state: {instance['DBInstanceStatus']}")
     return dbs
 
 
@@ -71,7 +70,7 @@ def delete_snapshots(rds):
 
 
 def main():
-    aws = botocore.session.Session(profile="cs291")
+    aws = botocore.session.Session(profile="scalableinternetservices-admin")
 
     print("Running")
     rds = aws.create_client("rds", REGION)
@@ -101,11 +100,7 @@ def main():
             params["RetainResources"] = logical_ids
         else:
             continue
-        print(
-            "Created: {} Deleting {} ".format(
-                NOW - stack["CreationTime"], stack["StackName"]
-            )
-        )
+        print(f"Created: {NOW - stack['CreationTime']} Deleting {stack['StackName']}")
         cf.delete_stack(StackName=stack["StackName"], **params)
 
     # Remove orphaned databases
@@ -122,11 +117,7 @@ def main():
         ):
             continue
         print(
-            "Last Update: {} Terminating {} ({})".format(
-                NOW - deployment["DateUpdated"],
-                deployment["EnvironmentName"],
-                deployment["Status"],
-            )
+            f"Last Update: {NOW - deployment['DateUpdated']} Terminating {deployment['EnvironmentName']} ({deployment['Status']})"
         )
         eb.terminate_environment(EnvironmentId=deployment["EnvironmentId"])
 

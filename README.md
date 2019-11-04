@@ -1,6 +1,6 @@
 # Scalable Internet Services Utility Script
 
-# scalable_admin.py
+# scalable_admin
 
 Provides the functionality necessary to administrate github and AWS for the
 purposes of Scalable Internet Services classes.
@@ -15,7 +15,7 @@ __Resolve python dependencies via__:
 __Configure AWS credentials by creating/editing the file `~/.aws/credentials`
 so that it contains an `admin` section__:
 
-    [admin]
+    [scalableinternetservices-admin]
     aws_access_key_id = ADMIN_USER_ACCESS_KEY
     aws_secret_access_key = ADMIN_USER_SECRET_ACCESS_KEY
 
@@ -29,25 +29,34 @@ to the github organization.
 
 __Create/update `$(HOME)/.config/scalable_admin.json`__
 
-The file has three keys that need to be set:
+The file has the following keys that need to be set:
 
-* __aws_region__: Set this value to permit students access to that single AWS
-  region.
+* __aws_account_alias__: Set this value to the IAM alias configured for your
+  AWS account.
+
+* __aws_account_id__: Set this value to your AWS account's numerical account ID.
+
+* __aws_iam_group_name__: Set this value to the IAM group name you'd like to
+  associate with all your class accounts.
+
+* __aws_region__: Set this value to the AWS region that you'd like to grant
+  access to.
+
+* __github_archive_organization__: Set this value to reflect the github
+  organization that you'd like to archive projects to.
 
 * __github_organization__: Set this value to reflect your github organization.
-
-* __s3_bucket__: Set this value to reflect the S3 bucket where you would like
-  your cloudformation templates to be stored. Teams will also be permitted to
-  PUT/GET items from `s3_bucket/TEAMNAME/`.
 
 Below is an example of the contents of the json file:
 
 ```json
 {
-"aws_region": "us-west-2",
-"github_organization": "scalableinternetservices",
-"github_archive_organization": "scalableinternetservicesarchive",
-"s3_bucket": "ucla-cs188-fall-2019"
+    "aws_account_alias": "bboe-ucsb",
+    "aws_account_id": "123456789012",
+    "aws_iam_group_name": "scalableinternetservices",
+    "aws_region": "us-west-2",
+    "github_archive_organization": "scalableinternetservicesarchive",
+    "github_organization": "scalableinternetservices"
 }
 ```
 
@@ -60,8 +69,7 @@ teams. On first run for a team this command will create the account, outputting
 the newly created credentials, and create the team's keypair file: `TEAM.pem`.
 
 Subsequent runs can be used to make updates to a team's permissions. This is
-only necessary if the permission settings have been modified in the
-`scalable_admin.py` file.
+only necessary if the permission settings have been modified in this package.
 
 ### scalable_admin aws-purge TEAM...
 
@@ -72,13 +80,8 @@ IAM web interface.
 ### scalable_admin aws-update-all
 
 Use this command to update the permissions for all teams. The list of teams is
-dynamically determined from the security group names excluding those that begin
-with `default`.
-
-### scalable_admin tsung-template [--no-test]
-
-Generate a cloudformation template to generate stacks that run the load testing
-tool tsung. The `--no-test` flag works as described above.
+dynamically determined from IAM users who belong to the group indicated by the
+config option `aws_iam_group_name`.
 
 ### scalable_admin github TEAM USER...
 

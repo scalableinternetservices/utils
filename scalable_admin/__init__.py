@@ -1,21 +1,16 @@
 """Scalable Admin is a helps administrate teams' access to github and aws."""
-from __future__ import print_function
-from os import chmod
-from sys import stderr
+import os
 import json
+import sys
 
 import botocore.exceptions
 import botocore.session
 
-from . import const
 from .helper import generate_password
 
 
-class AWS(object):
+class AWS:
     """This class handles AWS administrative tasks."""
-
-    AWS_ACCOUNT_ID = "671946291905"
-    REGION = None
 
     @staticmethod
     def exec(method, debug_output=True, **kwargs):
@@ -23,17 +18,18 @@ class AWS(object):
         try:
             response = method(**kwargs)
         except botocore.exceptions.ClientError as exc:
-            stderr.write(exc.response["Error"]["Message"])
-            stderr.write("\n")
+            sys.stderr.write(exc.response["Error"]["Message"])
+            sys.stderr.write("\n")
             return False
         if debug_output:
-            stderr.write("Success: {0} {1}\n".format(method.__name__, kwargs))
+            sys.stderr.write(f"Success: {method.__name__} {kwargs}\n")
         return response
 
-    def __init__(self):
+    def __init__(self, config):
         """Initialize the AWS class."""
-        self.aws = botocore.session.Session(profile=const.AWS_CREDENTIAL_PROFILE)
-        self.ec2 = self.aws.create_client("ec2", self.REGION)
+        self.aws = botocore.session.Session(profile="scalableinternetservices-admin")
+        self.config = config
+        self.ec2 = self.aws.create_client("ec2", config["aws_region"])
         self.iam = self.aws.create_client("iam", None)
 
     def configure(self, team):
@@ -62,17 +58,17 @@ class AWS(object):
                                 "lambda:UpdateFunctionCode",
                             ],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:lambda:{self.REGION}:{self.AWS_ACCOUNT_ID}:function:{team}",
+                            "Resource": f"arn:aws:lambda:{self.config['aws_region']}:{self.config['aws_account_id']}:function:{team}",
                         },
                         {
                             "Action": ["logs:DescribeLogStreams"],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group:/aws/lambda/{team}:log-stream:",
+                            "Resource": f"arn:aws:logs:{self.config['aws_region']}:{self.config['aws_account_id']}:log-group:/aws/lambda/{team}:log-stream:",
                         },
                         {
                             "Action": ["logs:GetLogEvents"],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group:/aws/lambda/{team}:log-stream:*",
+                            "Resource": f"arn:aws:logs:{self.config['aws_region']}:{self.config['aws_account_id']}:log-group:/aws/lambda/{team}:log-stream:*",
                         },
                     ]
                 }
@@ -80,11 +76,11 @@ class AWS(object):
         )
 
         # Create class IAM group if it does not exist
-        self.exec(self.iam.create_group, GroupName=const.IAM_GROUP_NAME)
+        self.exec(self.iam.create_group, GroupName=self.config["aws_iam_group_name"])
         self.exec(
             self.iam.put_group_policy,
-            GroupName=const.IAM_GROUP_NAME,
-            PolicyName=const.IAM_GROUP_NAME,
+            GroupName=self.config["aws_iam_group_name"],
+            PolicyName=self.config["aws_iam_group_name"],
             PolicyDocument=json.dumps(
                 {
                     "Statement": [
@@ -96,17 +92,17 @@ class AWS(object):
                                 "apigateway:PUT",
                             ],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:apigateway:{self.REGION}::/restapis*",
+                            "Resource": f"arn:aws:apigateway:{self.config['aws_region']}::/restapis*",
                         },
                         {
                             "Action": ["apigateway:GET"],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:apigateway:{self.REGION}::/*",
+                            "Resource": f"arn:aws:apigateway:{self.config['aws_region']}::/*",
                         },
                         {
                             "Action": ["iam:PassRole"],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:iam::{self.AWS_ACCOUNT_ID}:role/CS291Lambda",
+                            "Resource": f"arn:aws:iam::{self.config['aws_account_id']}:role/ScalableInternetServicesLambda",
                         },
                         {
                             "Action": [
@@ -119,7 +115,7 @@ class AWS(object):
                         {
                             "Action": ["logs:DescribeLogGroups"],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:logs:{self.REGION}:{self.AWS_ACCOUNT_ID}:log-group::log-stream:",
+                            "Resource": f"arn:aws:logs:{self.config['aws_region']}:{self.config['aws_account_id']}:log-group::log-stream:",
                         },
                     ]
                 }
@@ -132,15 +128,15 @@ class AWS(object):
             self.exec(self.iam.create_login_profile, UserName=team, Password=password)
             data = self.exec(self.iam.create_access_key, UserName=team)
             if data:
-                filename = "{0}_web_credentials.txt".format(team)
+                filename = f"{team}_web_credentials.txt"
                 with open(filename, "w") as fp:
                     fp.write(
-                        "     URL: https://bboe-ucsb.signin.aws.amazon.com/console\n"
+                        f"     URL: https://{self.config['aws_account_alias']}.signin.aws.amazon.com/console\n"
                     )
-                    fp.write("   alias: bboe-ucsb\n")
-                    fp.write("Username: {0}\n".format(team))
-                    fp.write("Password: {0}\n".format(password))
-                filename = "{0}_api_credentials.txt".format(team)
+                    fp.write(f"   alias: {self.config['aws_account_alias']}\n")
+                    fp.write(f"Username: {team}\n")
+                    fp.write(f"Password: {password}\n")
+                filename = f"{team}_api_credentials.txt"
                 with open(filename, "w") as fp:
                     fp.write("[default]\n")
                     fp.write(
@@ -149,7 +145,7 @@ class AWS(object):
                     fp.write(
                         f"aws_secret_access_key={data['AccessKey']['SecretAccessKey']}\n\n"
                     )
-                    fp.write("[cs291]\n")
+                    fp.write("[scalableinternetservices]\n")
                     fp.write(
                         f"aws_access_key_id={format(data['AccessKey']['AccessKeyId'])}\n"
                     )
@@ -158,14 +154,16 @@ class AWS(object):
                     )
             data = self.exec(self.ec2.create_key_pair, KeyName=team)
             if data:
-                filename = "{0}.pem".format(team)
+                filename = f"{team}.pem"
                 with open(filename, "w") as file_descriptor:
-                    chmod(filename, 0o600)
+                    os.chmod(filename, 0o600)
                     file_descriptor.write(data["KeyMaterial"])
 
         self.exec(self.iam.add_user_to_group, GroupName=team, UserName=team)
         self.exec(
-            self.iam.add_user_to_group, GroupName=const.IAM_GROUP_NAME, UserName=team
+            self.iam.add_user_to_group,
+            GroupName=self.config["aws_iam_group_name"],
+            UserName=team,
         )
 
         return 0
@@ -202,3 +200,9 @@ class AWS(object):
         # Delete user
         self.exec(self.iam.delete_user, UserName=team)
         return 0
+
+    def teams(self):
+        for user in self.exec(
+            self.iam.get_group, GroupName=self.config["aws_iam_group_name"]
+        )["Users"]:
+            yield user["UserName"]

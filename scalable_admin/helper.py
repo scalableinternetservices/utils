@@ -1,16 +1,24 @@
 """Defines one-off helpers used throughout the module."""
-from __future__ import print_function
-from json import load
-from os.path import expanduser, isfile
-from random import choice
-from sys import stderr
-from string import ascii_letters, digits
-from . import const
+import json
+import random
+import os.path
+import string
+import sys
+
+
+REQUIRED_CONFIG_KEYS = {
+    "aws_account_alias",
+    "aws_account_id",
+    "aws_iam_group_name",
+    "aws_region",
+    "github_archive_organization",
+    "github_organization",
+}
 
 
 def generate_password(length=16):
     """Generate password containing both cases of letters and digits."""
-    characters = ascii_letters + digits
+    characters = string.ascii_letters + string.digits
     selection = "0"
     while (
         selection.isalpha()
@@ -18,29 +26,26 @@ def generate_password(length=16):
         or selection.isupper()
         or selection.islower()
     ):
-        selection = "".join(choice(characters) for _ in range(length))
+        selection = "".join(random.choice(characters) for _ in range(length))
     return selection
 
 
 def parse_config(aws):
     """Parse the configuation file and set the necessary state."""
-    config_path = expanduser("~/.config/scalable_admin.json")
-    if not isfile(config_path):
-        stderr.write("{0} does not exist.\n".format(config_path))
-        exit(1)
+    config_path = os.path.expanduser("~/.config/scalable_admin.json")
+    if not os.path.isfile(config_path):
+        sys.stderr.write(f"{config_path} does not exist.\n")
+        sys.exit(1)
 
     with open(config_path) as fp:
-        config = load(fp)
+        config = json.load(fp)
 
     error = False
-    for key in ["aws_region", "github_organization", "s3_bucket"]:
+    for key in REQUIRED_CONFIG_KEYS:
         if key not in config:
-            stderr.write("The key {0} does not exist in {1}\n".format(key, config_path))
+            sys.stderr.write(f"The key {key} does not exist in {config_path}\n")
             error = True
     if error:
-        exit(1)
+        sys.exit(1)
 
-    aws.REGION = config["aws_region"]
-    const.GH_ARCHIVE_ORGANIZATION = config["github_archive_organization"]
-    const.GH_ORGANIZATION = config["github_organization"]
-    const.S3_BUCKET = config["s3_bucket"]
+    return config
