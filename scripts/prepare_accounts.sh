@@ -5,13 +5,20 @@ CREDENTIALS_PATH="$(dirname $0)/credentials"
 
 add_files() {
     teamname=$1
-    for extension in _key.txt .pem .txt; do
+    for extension in .pem _web_credentials.txt; do
         filename=$teamname$extension
         source_path="$CREDENTIALS_PATH/$filename"
         destination_path="/home/$teamname/$filename"
         sudo cp $source_path $destination_path
         sudo chown $teamname:$teamname $destination_path
     done
+    aws_credentials_path="/home/$teamname/.aws"
+    sudo mkdir -p $aws_credentials_path
+    sudo chown $teamname:$teamname $aws_credentials_path
+    sudo cp "$CREDENTIALS_PATH/${teamname}_api_credentials.txt" "$aws_credentials_path/credentials"
+    sudo chown $teamname:$teamname "$aws_credentials_path/credentials"
+    echo -e "[default]\nregion = us-west-2" | sudo tee "$aws_credentials_path/config" > /dev/null
+    sudo chown $teamname:$teamname "$aws_credentials_path/config"
 }
 
 
