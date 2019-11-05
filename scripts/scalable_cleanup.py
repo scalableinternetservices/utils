@@ -72,7 +72,6 @@ def delete_snapshots(rds):
 def main():
     aws = botocore.session.Session(profile="scalableinternetservices-admin")
 
-    print("Running")
     rds = aws.create_client("rds", REGION)
     delete_snapshots(rds)
     dbs = active_databases(rds)
