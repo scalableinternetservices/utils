@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta, tzinfo
 import botocore.session
+import pprint
 import sys
 
 
@@ -62,11 +63,9 @@ def delete_snapshots(rds):
             )
             deleted += 1
         elif snapshot["SnapshotType"] != "automated":
-            import pprint
-
             pprint.pprint(snapshot)
     if deleted > 0:
-        print("Deleted snapshots: {}")
+        print(f"Deleted snapshots: {deleted}")
 
 
 def main():
