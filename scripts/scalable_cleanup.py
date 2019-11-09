@@ -17,33 +17,11 @@ class UTC(tzinfo):
 NOW = datetime.now(UTC())
 
 
-def stacks(cf):
-    next_token = True
-    while next_token:
-        params = {}
-        if isinstance(next_token, str):
-            params["NextToken"] = next_token
-        response = cf.list_stacks(**params)
-        next_token = response.get("NextToken", None)
-        for stack in response["StackSummaries"]:
-            if stack["StackStatus"] != "DELETE_COMPLETE":
-                yield stack
-
-
-def is_stale_stack(stack):
-    # Any non-elasticbeanstalk stack running for 5 hours
-    return not stack["StackName"].startswith("awseb-e") and NOW - stack[
-        "CreationTime"
-    ] >= timedelta(minutes=300)
-
-
-def is_delete_failed_stack(stack):
-    return stack["StackStatus"] == "DELETE_FAILED"
-
-
-def active_databases(rds):
+def orphaned_databases(rds):
     dbs = set()
     for instance in rds.describe_db_instances()["DBInstances"]:
+        if instance["DBName"] == "ebdb":
+            continue
         dbs.add(instance["DBInstanceIdentifier"])
         if instance["DBInstanceStatus"] == "available":
             pass
@@ -75,34 +53,9 @@ def main():
     delete_snapshots(rds)
     dbs = active_databases(rds)
 
-    cf = aws.create_client("cloudformation", REGION)
-    for stack in stacks(cf):
-        resources = {
-            x["LogicalResourceId"]: x
-            for x in cf.describe_stack_resources(StackName=stack["StackName"])[
-                "StackResources"
-            ]
-        }
-        if "AWSEBRDSDatabase" in resources:
-            rds_id = resources["AWSEBRDSDatabase"]["PhysicalResourceId"]
-            if rds_id in dbs:
-                dbs.remove(rds_id)
-
-        params = {}
-        if is_stale_stack(stack):
-            pass
-        elif is_delete_failed_stack(stack):
-            reason = stack["StackStatusReason"]
-            index = reason.rfind("[")
-            logical_ids = [x.strip() for x in reason[index + 1 : -3].split(",")]
-            params["RetainResources"] = logical_ids
-        else:
-            continue
-        print(f"Created: {NOW - stack['CreationTime']} Deleting {stack['StackName']}")
-        cf.delete_stack(StackName=stack["StackName"], **params)
-
     # Remove orphaned databases
     for db in dbs:
+        print(f"Deleting database: {db}")
         rds.delete_db_instance(DBInstanceIdentifier=db, SkipFinalSnapshot=True)
 
     # Terminate any deployment that hasn't been updated within an hour
