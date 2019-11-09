@@ -17,17 +17,52 @@ class UTC(tzinfo):
 NOW = datetime.now(UTC())
 
 
-def orphaned_databases(rds):
-    dbs = set()
+def delete_ec2_instances(aws):
+    ec2 = aws.create_client("ec2", REGION)
+    ids = []
+    for reservation in ec2.describe_instances()["Reservations"]:
+        for instance in reservation["Instances"]:
+            if not [x for x in instance["SecurityGroups"] if x["GroupName"] == "tsung"]:
+                break
+
+            duration = NOW - instance["LaunchTime"]
+            if instance["State"]["Name"] in {"terminated"} or duration < timedelta(minutes=300):
+                continue
+            if instance["State"]["Name"] not in {"running"}:
+                print(f"Unknown state: {instance['State']['Name']}")
+
+            name = next(x["Value"] for x in instance["Tags"] if x["Key"] == "Name")
+            print(f"Deleting EC2 instance {name} (Duration: {duration})")
+            ids.append(instance["InstanceId"])
+    if ids:
+        ec2.terminate_instances(InstanceIds=ids)
+
+
+
+def delete_elastic_beanstalk_deployments(aws):
+    # Terminate any deployment that hasn't been updated within an hour
+    eb = aws.create_client("elasticbeanstalk", REGION)
+    for deployment in eb.describe_environments()["Environments"]:
+        if (
+            deployment["Status"].startswith("Terminat")
+            or deployment["Status"] == "Launching"
+            or NOW - deployment["DateUpdated"] < timedelta(minutes=110)
+        ):
+            continue
+        print(
+            f"Last Update: {NOW - deployment['DateUpdated']} Terminating {deployment['EnvironmentName']} ({deployment['Status']})"
+        )
+        eb.terminate_environment(EnvironmentId=deployment["EnvironmentId"])
+
+
+def delete_orphaned_databases(rds):
     for instance in rds.describe_db_instances()["DBInstances"]:
         if instance["DBName"] == "ebdb":
             continue
-        dbs.add(instance["DBInstanceIdentifier"])
-        if instance["DBInstanceStatus"] == "available":
-            pass
-        elif instance["DBInstanceStatus"] not in ["backing-up", "creating", "deleting"]:
-            print(f"Unhandled RDS state: {instance['DBInstanceStatus']}")
-    return dbs
+
+        db = instance["DBInstanceIdentifier"]
+        print(f"Deleting database: {db}")
+        rds.delete_db_instance(DBInstanceIdentifier=db, SkipFinalSnapshot=True)
 
 
 def delete_snapshots(rds):
@@ -50,28 +85,10 @@ def main():
     aws = botocore.session.Session(profile="scalableinternetservices-admin")
 
     rds = aws.create_client("rds", REGION)
-    delete_snapshots(rds)
-    dbs = active_databases(rds)
-
-    # Remove orphaned databases
-    for db in dbs:
-        print(f"Deleting database: {db}")
-        rds.delete_db_instance(DBInstanceIdentifier=db, SkipFinalSnapshot=True)
-
-    # Terminate any deployment that hasn't been updated within an hour
-    eb = aws.create_client("elasticbeanstalk", REGION)
-    for deployment in eb.describe_environments()["Environments"]:
-        if (
-            deployment["Status"].startswith("Terminat")
-            or deployment["Status"] == "Launching"
-            or NOW - deployment["DateUpdated"] < timedelta(minutes=110)
-        ):
-            continue
-        print(
-            f"Last Update: {NOW - deployment['DateUpdated']} Terminating {deployment['EnvironmentName']} ({deployment['Status']})"
-        )
-        eb.terminate_environment(EnvironmentId=deployment["EnvironmentId"])
-
+    delete_ec2_instances(aws)
+    # delete_elastic_beanstalk_deployments(aws)
+    # delete_orphaned_databases(rds)
+    # delete_snapshots(rds)
     return 0
 
 
