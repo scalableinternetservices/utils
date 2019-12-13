@@ -1,0 +1,39 @@
+{
+  "builders": [{
+    "ami_description": "Tsung AMI for the Scalable Internet Services class.",
+    "ami_name": "{{user `ami_name`}}",
+    "ebs_optimized": true,
+    "force_delete_snapshot": true,
+    "force_deregister": true,
+    "instance_type": "{{user `instance_type`}}",
+    "profile": "{{user `profile`}}",
+    "region": "{{user `region`}}",
+    "source_ami_filter": {
+      "filters": {
+        "name": "amzn2-ami-hvm-2.0.*-x86_64-gp2",
+        "root-device-type": "ebs",
+        "virtualization-type": "hvm"
+      },
+      "most_recent": true,
+      "owners": ["amazon"]
+    },
+    "snapshot_tags": {"Name": "AMI {{user `ami_name`}}"},
+    "ssh_username": "ec2-user",
+    "tags": {"SourceAMI": "{{.SourceAMI}}", "SourceAMIName": "{{.SourceAMIName}}"},
+    "type": "amazon-ebs"
+  }],
+  "provisioners": [{
+    "destination": "./",
+    "source": "tsung_example.xml",
+    "type": "file"
+  }, {
+    "script": "install_tsung.sh",
+    "type": "shell"
+  }],
+  "variables": {
+    "ami_name": "Tsung 1.7.0 {{isotime \"2006-01-02\"}}",
+    "instance_type": "t3.micro",
+    "profile": "scalableinternetservices-admin",
+    "region": "us-west-2"
+  }
+}
