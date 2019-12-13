@@ -86,9 +86,9 @@ def main():
 
     rds = aws.create_client("rds", REGION)
     delete_ec2_instances(aws)
-    # delete_elastic_beanstalk_deployments(aws)
-    # delete_orphaned_databases(rds)
-    # delete_snapshots(rds)
+    delete_elastic_beanstalk_deployments(aws)
+    delete_orphaned_databases(rds)
+    delete_snapshots(rds)
     return 0
 
 
