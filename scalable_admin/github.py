@@ -11,14 +11,14 @@ from .helper import update_config
 
 def _get_repository(organization, repository_name):
     for repository in organization.repositories("public"):
-        if repository.name == repository_name:
+        if repository.name.lower() == repository_name.lower():
             return repository
     return None
 
 
 def _get_team(organization, team_name):
     for team in organization.teams():
-        if team.name == team_name:
+        if team.name.lower() == team_name.lower():
             return team
     return None
 
