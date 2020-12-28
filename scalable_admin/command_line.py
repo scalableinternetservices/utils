@@ -5,13 +5,13 @@ Usage:
   scalable_admin aws-purge TEAM...
   scalable_admin aws-update-all
   scalable_admin github TEAM USER...
-  scalable_admin github-archive
+  scalable_admin github-archive (TEAM|--all)
 
 -h --help  show this message
 """
 from docopt import docopt
 
-from .github import archive_projects, configure_github_team
+from .github import archive_project, archive_projects, configure_github_team
 from .helper import parse_config
 from . import AWS
 
@@ -61,15 +61,19 @@ def cmd_github(args, config):
     )
 
 
-def cmd_github_archive(_, config):
-    return archive_projects(config=config)
+def cmd_github_archive(args, config):
+    if args['--all']:
+        return archive_projects(config=config)
+    else:
+        assert len(args["TEAM"]) == 1
+        return archive_project(config=config, name=args["TEAM"][0])
 
 
 def main():
     """Provide the entrance point for the scalable_admin command."""
     args = docopt(__doc__)
 
-    config = parse_config(AWS)
+    config = parse_config()
     clean_team_names(args)
 
     commands = {

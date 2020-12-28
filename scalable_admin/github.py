@@ -1,16 +1,67 @@
 """Provides functions that interact with github's API."""
-
-from __future__ import print_function
-from os import unlink
-from os.path import isfile
 from random import randint
 from sys import stdin, stdout
+
+from github3 import GitHubError
+from github3.github import GitHub
+
 from . import const
+from .helper import update_config
+
+
+
+def _get_repository(organization, repository_name):
+    for repository in organization.repositories("public"):
+        if repository.name == repository_name:
+            return repository
+    return None
+
+
+def _get_team(organization, team_name):
+    for team in organization.teams():
+        if team.name == team_name:
+            return team
+    return None
+
+
+def _transfer_repository(repository, destination):
+    url = repository._build_url("transfer", base_url=repository._api)
+    repository._json(repository._post(url, data={"new_owner": destination}), 202)
+
+
+def archive_project(config, name):
+    archive_org = github_authenticate_with_org(config["github_archive_organization"], access_token=config.get("github_access_token"))
+    archive_repo = _get_repository(archive_org, name)
+    if archive_repo is not None:
+        print(f"Repo {name} already exists in organization {archive_org.login}.")
+        return 1
+
+    live_org = github_authenticate_with_org(config["github_organization"], access_token=config.get("github_access_token"))
+    repo = _get_repository(live_org, name)
+    if repo is None:
+        print(f"Repo {name} does not exist in organization {live_org.login}.")
+        return 1
+
+    for team in repo.teams():
+        for member in team.members():
+            print(f"Adding {member} to repository.")
+            repo.add_collaborator(member)
+        if len(list(team.repositories())) == 1:
+            print(f"Deleting team {team.name}.")
+            team.delete()
+
+    print("Transferring repository.")
+    _transfer_repository(repo, archive_org.login)
+    repository = _get_repository(archive_org, name)
+    print("Archiving repository.")
+    repository.edit(repository.name, archived=True)
 
 
 def archive_projects(config):
     """Set archive flag on all projects in archive repo."""
-    organization = github_authenticate_with_org(config["github_archive_organization"])
+    repository = config["github_archive_organization"]
+    organization = github_authenticate_with_org(repository, access_token=config.get("github_access_token"))
+    print(f"Setting archive bit on all repos in {repository}.")
     for repository in organization.repositories():
         if not repository.archived:
             repository.edit(repository.name, archived=True)
@@ -29,9 +80,9 @@ def configure_github_team(config, team_name, user_names):
         print("Aborting")
         return 1
 
-    org = github_authenticate_with_org(config["github_organization"])
+    org = github_authenticate_with_org(config["github_organization"], access_token=config.get("github_access_token"))
 
-    team = None  # Fetch or create team
+    team = _get_team(org, team_name)
     for iteam in org.teams():
         if iteam.name == team_name:
             team = iteam
@@ -39,13 +90,9 @@ def configure_github_team(config, team_name, user_names):
     if team is None:
         team = org.create_team(team_name, permission="admin")
 
-    repo = None  # Fetch or create repository
-    for irepo in org.repositories("public"):
-        if irepo.name == team_name:
-            repo = irepo
-            break
+    repo = _get_repository(org, team_name)
     if repo is None:  # Create repo and associate with the team
-        repo = org.create_repository(team_name, has_wiki=False, team_id=team.id)
+        repo = org.create_repository(team_name, delete_branch_on_merge=True, has_wiki=False, team_id=team.id)
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
 
@@ -55,51 +102,31 @@ def configure_github_team(config, team_name, user_names):
     return 0
 
 
-def get_github_token():
-    """Fetch and/or load API authorization token for Github."""
-    if isfile(const.GH_CREDENTIAL_FILE):
-        with open(const.GH_CREDENTIAL_FILE) as file_descriptor:
-            token = file_descriptor.readline().strip()
-            auth_id = file_descriptor.readline().strip()
-            return token, auth_id
-
-    from github3 import authorize
-    from getpass import getpass
-
-    def two_factor_callback():
-        """Obtain input for 2FA token."""
-        stdout.write("Two factor token: ")
-        stdout.flush()
-        return stdin.readline().strip()
-
-    user = input("Github admin username: ")
-    auth = authorize(
-        user,
-        getpass(f"Password for {user}: "),
-        ["public_repo", "admin:org"],
-        f"Scalable Internet Services Create Repo Script {randint(100, 999)}",
-        "http://example.com",
-        two_factor_callback=two_factor_callback,
-    )
-
-    with open(const.GH_CREDENTIAL_FILE, "w") as file_descriptor:
-        file_descriptor.write(f"{auth.token}\n{auth.id}\n")
-    return auth.token, auth.id
-
-
-def github_authenticate_with_org(organization):
+def github_authenticate_with_org(organization, access_token):
     """Authenticate to github and return the desired organization handle."""
-    from github3 import GitHubError, login
+    save_access_token = access_token is None
 
-    while True:
-        gh_token, _ = get_github_token()
-        github = login(token=gh_token)
+    github_organization = None
+    while github_organization is None:
+        if access_token is None:
+            from getpass import getpass
+            print("Please set up a personal access token with 'public_repo' and 'admin:org' access.'")
+            print("https://github.com/settings/tokens")
+            access_token = getpass(f"Personal Access Token: ")
+
+        github = GitHub()
+        github.login(token=access_token)
         try:  # Test login
-            return github.membership_in(organization).organization
+            github_organization = github.membership_in(organization).organization
         except GitHubError as exc:
             if exc.code != 401:  # Bad Credentials
                 raise
             print(f"{exc.message}. Try again.")
+            access_token = None
 
-            if isfile(const.GH_CREDENTIAL_FILE):
-                unlink(const.GH_CREDENTIAL_FILE)
+    if save_access_token:
+        update_config(github_access_token=access_token)
+
+    return github_organization
+
+
