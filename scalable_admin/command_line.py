@@ -62,7 +62,7 @@ def cmd_github(args, config):
 
 
 def cmd_github_archive(args, config):
-    if args['--all']:
+    if args["--all"]:
         return archive_projects(config=config)
     else:
         assert len(args["TEAM"]) == 1

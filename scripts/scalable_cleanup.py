@@ -26,7 +26,9 @@ def delete_ec2_instances(aws):
                 break
 
             duration = NOW - instance["LaunchTime"]
-            if instance["State"]["Name"] in {"terminated"} or duration < timedelta(minutes=300):
+            if instance["State"]["Name"] in {"terminated"} or duration < timedelta(
+                minutes=300
+            ):
                 continue
             if instance["State"]["Name"] not in {"running"}:
                 print(f"Unknown state: {instance['State']['Name']}")
@@ -36,7 +38,6 @@ def delete_ec2_instances(aws):
             ids.append(instance["InstanceId"])
     if ids:
         ec2.terminate_instances(InstanceIds=ids)
-
 
 
 def delete_elastic_beanstalk_deployments(aws):

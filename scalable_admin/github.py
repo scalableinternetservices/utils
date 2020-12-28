@@ -9,7 +9,6 @@ from . import const
 from .helper import update_config
 
 
-
 def _get_repository(organization, repository_name):
     for repository in organization.repositories("public"):
         if repository.name == repository_name:
@@ -30,13 +29,18 @@ def _transfer_repository(repository, destination):
 
 
 def archive_project(config, name):
-    archive_org = github_authenticate_with_org(config["github_archive_organization"], access_token=config.get("github_access_token"))
+    archive_org = github_authenticate_with_org(
+        config["github_archive_organization"],
+        access_token=config.get("github_access_token"),
+    )
     archive_repo = _get_repository(archive_org, name)
     if archive_repo is not None:
         print(f"Repo {name} already exists in organization {archive_org.login}.")
         return 1
 
-    live_org = github_authenticate_with_org(config["github_organization"], access_token=config.get("github_access_token"))
+    live_org = github_authenticate_with_org(
+        config["github_organization"], access_token=config.get("github_access_token")
+    )
     repo = _get_repository(live_org, name)
     if repo is None:
         print(f"Repo {name} does not exist in organization {live_org.login}.")
@@ -60,7 +64,9 @@ def archive_project(config, name):
 def archive_projects(config):
     """Set archive flag on all projects in archive repo."""
     repository = config["github_archive_organization"]
-    organization = github_authenticate_with_org(repository, access_token=config.get("github_access_token"))
+    organization = github_authenticate_with_org(
+        repository, access_token=config.get("github_access_token")
+    )
     print(f"Setting archive bit on all repos in {repository}.")
     for repository in organization.repositories():
         if not repository.archived:
@@ -80,7 +86,9 @@ def configure_github_team(config, team_name, user_names):
         print("Aborting")
         return 1
 
-    org = github_authenticate_with_org(config["github_organization"], access_token=config.get("github_access_token"))
+    org = github_authenticate_with_org(
+        config["github_organization"], access_token=config.get("github_access_token")
+    )
 
     team = _get_team(org, team_name)
     for iteam in org.teams():
@@ -92,7 +100,9 @@ def configure_github_team(config, team_name, user_names):
 
     repo = _get_repository(org, team_name)
     if repo is None:  # Create repo and associate with the team
-        repo = org.create_repository(team_name, delete_branch_on_merge=True, has_wiki=False, team_id=team.id)
+        repo = org.create_repository(
+            team_name, delete_branch_on_merge=True, has_wiki=False, team_id=team.id
+        )
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
 
@@ -110,7 +120,10 @@ def github_authenticate_with_org(organization, access_token):
     while github_organization is None:
         if access_token is None:
             from getpass import getpass
-            print("Please set up a personal access token with 'public_repo' and 'admin:org' access.'")
+
+            print(
+                "Please set up a personal access token with 'public_repo' and 'admin:org' access.'"
+            )
             print("https://github.com/settings/tokens")
             access_token = getpass(f"Personal Access Token: ")
 
@@ -128,5 +141,3 @@ def github_authenticate_with_org(organization, access_token):
         update_config(github_access_token=access_token)
 
     return github_organization
-
-
