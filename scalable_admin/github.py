@@ -73,6 +73,22 @@ def archive_projects(config):
             repository.edit(repository.name, archived=True)
 
 
+def cleanup(config):
+    """Remove users from organization who are not associated with a team."""
+    organization = github_authenticate_with_org(
+        config["github_organization"], access_token=config.get("github_access_token")
+    )
+    members_with_team = set()
+    for team in organization.teams():
+        for member in team.members():
+            members_with_team.add(member)
+
+    for member in organization.members():
+        if member not in members_with_team:
+            print(f"Removing {member} from organization.")
+            organization.remove_member(member)
+
+
 def configure_github_team(config, team_name, user_names):
     """Create team and team repository and add users to the team on Github."""
     print(
