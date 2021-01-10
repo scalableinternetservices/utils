@@ -48,6 +48,51 @@ class AWS:
                     "Statement": [
                         {
                             "Action": [
+                                "elasticbeanstalk:CreateApplication",
+                                "elasticbeanstalk:DeleteApplication",
+                            ],
+                            "Effect": "Deny",
+                            "NotResource": f"arn:aws:elasticbeanstalk:{self.config['aws_region']}:{self.config['aws_account_id']}:application/{team}",
+                        },
+                        {
+                            "Action": [
+                                "elasticbeanstalk:CreateApplicationVersion",
+                                "elasticbeanstalk:CreateConfigurationTemplate",
+                                "elasticbeanstalk:CreateEnvironment",
+                                "elasticbeanstalk:DeleteApplicationVersion",
+                                "elasticbeanstalk:DeleteConfigurationTemplate",
+                                "elasticbeanstalk:DeleteEnvironmentConfiguration",
+                                "elasticbeanstalk:DescribeApplicationVersions",
+                                "elasticbeanstalk:DescribeConfigurationOptions",
+                                "elasticbeanstalk:DescribeConfigurationSettings",
+                                "elasticbeanstalk:DescribeEnvironmentResources",
+                                "elasticbeanstalk:DescribeEnvironments",
+                                "elasticbeanstalk:DescribeEvents",
+                                "elasticbeanstalk:DeleteEnvironmentConfiguration",
+                                "elasticbeanstalk:RebuildEnvironment",
+                                "elasticbeanstalk:RequestEnvironmentInfo",
+                                "elasticbeanstalk:RestartAppServer",
+                                "elasticbeanstalk:RetrieveEnvironmentInfo",
+                                "elasticbeanstalk:SwapEnvironmentCNAMEs",
+                                "elasticbeanstalk:TerminateEnvironment",
+                                "elasticbeanstalk:UpdateApplicationVersion",
+                                "elasticbeanstalk:UpdateConfigurationTemplate",
+                                "elasticbeanstalk:UpdateEnvironment",
+                                "elasticbeanstalk:RetrieveEnvironmentInfo",
+                                "elasticbeanstalk:ValidateConfigurationSettings",
+                            ],
+                            "Condition": {
+                                "StringNotEquals": {
+                                    "elasticbeanstalk:InApplication": [
+                                        f"arn:aws:elasticbeanstalk:{self.config['aws_region']}:{self.config['aws_account_id']}:application/{team}"
+                                    ]
+                                }
+                            },
+                            "Effect": "Deny",
+                            "Resource": "*",
+                        },
+                        {
+                            "Action": [
                                 "lambda:AddPermission",
                                 "lambda:CreateFunction",
                                 "lambda:DeleteFunction",
