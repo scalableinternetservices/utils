@@ -122,6 +122,13 @@ class AWS:
             ),
         )
 
+        # Attach AWSElasticBeanstalkFullAccess to class group
+        self.exec(
+            self.iam.attach_group_policy,
+            GroupName=self.config["aws_iam_group_name"],
+            PolicyArn="arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess",
+        )
+
         # Configure user account / password / access keys / keypair
         if self.exec(self.iam.create_user, UserName=team):
             password = generate_password()
