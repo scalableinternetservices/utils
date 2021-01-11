@@ -6,7 +6,7 @@
   </clients>
 
   <servers>
-    <server host="www.cs291.com" port="80" type="tcp"></server>
+    <server host="cs291.com" port="443" type="ssl"></server>
   </servers>
 
   <load>
@@ -50,7 +50,7 @@
   <sessions>
     <session name="example" type="ts_http" weight="1">
       <request><http method="GET" url="/"></http></request>
-      <request><http method="GET" url="/lecture/"></http></request>
+      <request><http method="GET" url="/schedule/"></http></request>
       <request><http method="GET" url="/project/"></http></request>
     </session>
   </sessions>
