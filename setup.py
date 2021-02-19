@@ -40,7 +40,6 @@ setup(
     license="Simplified BSD License",
     long_description=README,
     packages=[PACKAGE_NAME],
-    package_data={PACKAGE_NAME: ["segments/*.sh"]},
     url="https://github.com/scalableinternetservices/utils",
     version=VERSION,
 )
