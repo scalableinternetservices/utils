@@ -106,6 +106,10 @@ def configure_github_team(config, team_name, user_names):
         config["github_organization"], access_token=config.get("github_access_token")
     )
 
+    # class_team = _get_team(org, "ucsb")
+    # import pprint
+    # pprint.pprint(vars(class_team))
+
     team = _get_team(org, team_name)
     for iteam in org.teams():
         if iteam.name == team_name:
@@ -117,11 +121,15 @@ def configure_github_team(config, team_name, user_names):
     repo = _get_repository(org, team_name)
     if repo is None:  # Create repo and associate with the team
         repo = org.create_repository(
-            team_name, delete_branch_on_merge=True, has_wiki=False, team_id=team.id
+            team_name,
+            allow_rebase_merge=False,
+            allow_squash_merge=False,
+            delete_branch_on_merge=True,
+            has_wiki=False,
+            team_id=team.id,
         )
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
-
     for user in user_names:  # Add users to the team
         print(team.invite(user))
 
