@@ -10,7 +10,8 @@ purposes of Scalable Internet Services classes.
 
 __Resolve python dependencies via__:
 
-    python setup.py install
+    # cd to the directory containing setup.py and run
+    pip install -e .
 
 __Configure AWS credentials by creating/editing the file `~/.aws/credentials`
 so that it contains an `admin` section__:
