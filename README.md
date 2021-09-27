@@ -52,7 +52,7 @@ Below is an example of the contents of the json file:
 
 ```json
 {
-    "aws_account_alias": "bboe-ucsb",
+    "aws_account_alias": "cs291a",
     "aws_account_id": "123456789012",
     "aws_iam_group_name": "scalableinternetservices",
     "aws_region": "us-west-2",
