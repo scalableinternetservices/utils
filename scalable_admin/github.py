@@ -1,4 +1,5 @@
 """Provides functions that interact with github's API."""
+import json
 from random import randint
 from sys import stdin, stdout
 
@@ -105,34 +106,27 @@ def configure_github_team(config, team_name, user_names):
     org = github_authenticate_with_org(
         config["github_organization"], access_token=config.get("github_access_token")
     )
-
-    # class_team = _get_team(org, "ucsb")
-    # import pprint
-    # pprint.pprint(vars(class_team))
-
+    class_team = _get_team(org, "ucsb")
     team = _get_team(org, team_name)
-    for iteam in org.teams():
-        if iteam.name == team_name:
-            team = iteam
-            break
     if team is None:
         team = org.create_team(team_name, permission="admin")
+        # org.create_team doesn't support parent_team_id so edit it in manually
+        team._patch(team._api, data=json.dumps({"parent_team_id": class_team.id}))
 
     repo = _get_repository(org, team_name)
     if repo is None:  # Create repo and associate with the team
         repo = org.create_repository(
             team_name,
-            allow_rebase_merge=False,
-            allow_squash_merge=False,
-            delete_branch_on_merge=True,
             has_wiki=False,
             team_id=team.id,
         )
+        # repo.edit does not support `delete_branch_on_merge` so let's do it manually
+        data = {"allow_rebase_merge": False, "allow_squash_merge": False, "delete_branch_on_merge": True}
+        response = repo._patch(repo._api, data=json.dumps(data))
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
     for user in user_names:  # Add users to the team
-        print(team.invite(user))
-
+        team.add_or_update_membership(user)
     return 0
 
 
