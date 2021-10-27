@@ -111,7 +111,10 @@ def configure_github_team(config, team_name, user_names):
     if team is None:
         team = org.create_team(team_name, permission="admin")
         # org.create_team doesn't support parent_team_id so edit it in manually
-        team._patch(team._api, data=json.dumps({"parent_team_id": class_team.id}))
+        team._patch(
+            team._api,
+            data=json.dumps({"parent_team_id": class_team.id, "privacy": "closed"}),
+        )
 
     repo = _get_repository(org, team_name)
     if repo is None:  # Create repo and associate with the team
@@ -121,7 +124,11 @@ def configure_github_team(config, team_name, user_names):
             team_id=team.id,
         )
         # repo.edit does not support `delete_branch_on_merge` so let's do it manually
-        data = {"allow_rebase_merge": False, "allow_squash_merge": False, "delete_branch_on_merge": True}
+        data = {
+            "allow_rebase_merge": False,
+            "allow_squash_merge": False,
+            "delete_branch_on_merge": True,
+        }
         response = repo._patch(repo._api, data=json.dumps(data))
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
