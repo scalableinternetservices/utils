@@ -1,3 +1,5 @@
+set -e
+
 export VERSION=tsung-1.7.0
 
 sudo yum update --assumeyes
@@ -23,7 +25,7 @@ sudo rpm -i erlang-22.2-1.el7.x86_64.rpm
 rm erlang-22.2-1.el7.x86_64.rpm
 
 # Install matplotlib (for tsplot)
-wget https://bootstrap.pypa.io/get-pip.py
+wget https://bootstrap.pypa.io/pip/2.7/get-pip.py
 sudo python get-pip.py
 rm get-pip.py
 sudo pip install matplotlib
