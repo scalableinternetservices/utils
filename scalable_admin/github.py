@@ -1,10 +1,13 @@
 """Provides functions that interact with github's API."""
+import io
 import json
+import zipfile
 from random import randint
 from sys import stdin, stdout
 
 from github3 import GitHubError
 from github3.github import GitHub
+from github3.repos import Repository
 
 from . import const
 from .helper import update_config
@@ -137,7 +140,28 @@ def configure_github_team(config, team_name, user_names):
     return 0
 
 
-def github_authenticate_with_org(organization, access_token):
+def download_repository(*, config, url):
+    github = github_authenticate_with_org(
+        config["github_organization"],
+        access_token=config.get("github_access_token"),
+        github_object=True,
+    )
+    parts = url.split("/")
+    owner = parts[3]
+    name = parts[4]
+
+    repository = github.repository(owner, name)
+
+    with io.BytesIO() as fp:
+        repository.archive("zipball", fp, "")
+        with zipfile.ZipFile(fp) as zfp:
+            for member in zfp.infolist():
+                suffix = member.filename.split("/", 1)[1]
+                member.filename = f"{owner}/{suffix}"
+                zfp.extract(member)
+
+
+def github_authenticate_with_org(organization, access_token, github_object=False):
     """Authenticate to github and return the desired organization handle."""
     save_access_token = access_token is None
 
@@ -165,4 +189,6 @@ def github_authenticate_with_org(organization, access_token):
     if save_access_token:
         update_config(github_access_token=access_token)
 
+    if github_object:
+        return github
     return github_organization

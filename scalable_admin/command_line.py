@@ -7,12 +7,19 @@ Usage:
   scalable_admin github TEAM USER...
   scalable_admin github-archive (TEAM|--all)
   scalable_admin github-cleanup
+  scalable_admin github-download URL
 
 -h --help  show this message
 """
 from docopt import docopt
 
-from .github import archive_project, archive_projects, cleanup, configure_github_team
+from .github import (
+    archive_project,
+    archive_projects,
+    cleanup,
+    configure_github_team,
+    download_repository,
+)
 from .helper import parse_config
 from . import AWS
 
@@ -74,6 +81,10 @@ def cmd_github_cleanup(_, config):
     return cleanup(config=config)
 
 
+def cmd_github_download(args, config):
+    return download_repository(config=config, url=args["URL"])
+
+
 def main():
     """Provide the entrance point for the scalable_admin command."""
     args = docopt(__doc__)
@@ -88,6 +99,7 @@ def main():
         "github": cmd_github,
         "github-archive": cmd_github_archive,
         "github-cleanup": cmd_github_cleanup,
+        "github-download": cmd_github_download,
     }
 
     for command_name in commands:
