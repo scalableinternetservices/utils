@@ -136,7 +136,12 @@ def configure_github_team(config, team_name, user_names):
     elif team not in list(repo.teams()):
         print(org.add_repo(repo, team))
     for user in user_names:  # Add users to the team
-        team.add_or_update_membership(user)
+        try:
+            team.add_or_update_membership(user)
+        except GitHubError as exc:
+            if exc.code != 404:  # Not Found
+                raise
+            print(f"{user} not found")
     return 0
 
 
