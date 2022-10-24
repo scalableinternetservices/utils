@@ -153,6 +153,14 @@ class AWS:
                             "Action": [
                                 "lambda:GetAccountSettings",
                                 "lambda:ListFunctions",
+				"lambda:AddPermission",
+                                "lambda:CreateFunction",
+                                "lambda:DeleteFunction",
+                                "lambda:GetFunction",
+                                "lambda:GetPolicy",
+                                "lambda:InvokeFunction",
+                                "lambda:ListVersionsByFunction",
+                                "lambda:UpdateFunctionCode"
                             ],
                             "Effect": "Allow",
                             "Resource": "*",
@@ -172,6 +180,12 @@ class AWS:
             self.iam.attach_group_policy,
             GroupName=self.config["aws_iam_group_name"],
             PolicyArn="arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess",
+        )
+
+        self.exec(
+            self.iam.attach_group_policy,
+            GroupName=self.config["aws_iam_group_name"],
+            PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk",
         )
 
         # Configure user account / password / access keys / keypair

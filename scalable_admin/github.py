@@ -112,7 +112,7 @@ def configure_github_team(config, team_name, user_names):
     class_team = _get_team(org, "ucsb")
     team = _get_team(org, team_name)
     if team is None:
-        team = org.create_team(team_name, permission="admin")
+        team = org.create_team(team_name)
         # org.create_team doesn't support parent_team_id so edit it in manually
         team._patch(
             team._api,
