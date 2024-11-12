@@ -115,6 +115,13 @@ class AWS:
                             "Effect": "Allow",
                             "Resource": f"arn:aws:logs:{self.config['aws_region']}:{self.config['aws_account_id']}:log-group:/aws/lambda/{team}:log-stream:*",
                         },
+                        {
+                            "Action": [
+                                "ec2:RunInstances"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": f"arn:aws:ec2:us-west-2:671946291905:key-pair/{team}"
+                        }
                     ]
                 }
             ),
@@ -177,6 +184,20 @@ class AWS:
                             ],
                             "Effect": "Allow",
                             "Resource": "arn:aws:rds:us-west-2:671946291905:db:*"
+                        },
+                        {
+                            "Action": [
+                                "ec2:RunInstances"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                "arn:aws:ec2:us-west-2::image/ami-0983761f3d0032a72",
+                                "arn:aws:ec2:us-west-2:671946291905:instance/*",
+                                "arn:aws:ec2:us-west-2:671946291905:network-interface/*",
+                                "arn:aws:ec2:us-west-2:671946291905:security-group/*",
+                                "arn:aws:ec2:us-west-2:671946291905:subnet/*",
+                                "arn:aws:ec2:us-west-2:671946291905:volume/*"
+                            ]
                         }
 
                     ]
