@@ -175,13 +175,6 @@ class AWS:
             ),
         )
 
-        # Attach AWSElasticBeanstalkFullAccess to class group
-        self.exec(
-            self.iam.attach_group_policy,
-            GroupName=self.config["aws_iam_group_name"],
-            PolicyArn="arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess",
-        )
-
         self.exec(
             self.iam.attach_group_policy,
             GroupName=self.config["aws_iam_group_name"],
