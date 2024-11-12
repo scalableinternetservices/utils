@@ -170,6 +170,15 @@ class AWS:
                             "Effect": "Allow",
                             "Resource": f"arn:aws:logs:{self.config['aws_region']}:{self.config['aws_account_id']}:log-group::log-stream:",
                         },
+                        {
+                            "Action": [
+                                "rds:AddTagsToResource",
+                                "rds:RemoveTagsFromResource"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "arn:aws:rds:us-west-2:671946291905:db:*"
+                        }
+
                     ]
                 }
             ),
