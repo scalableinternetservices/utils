@@ -28,7 +28,12 @@ def clean_team_names(args):
     """Replace spaces and underscores with hyphens in team names."""
     if args["TEAM"]:
         for i, item in enumerate(args["TEAM"]):
-            item = item.strip().replace(" ", "-")
+            item = item.strip() \
+                .replace(" ", "-") \
+                .replace("'", "") \
+                .replace('&', '-and-') \
+                .replace('::', '-') \
+                .lower()
             args["TEAM"][i] = item.replace("_", "-")
 
 
