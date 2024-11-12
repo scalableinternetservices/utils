@@ -153,7 +153,7 @@ class AWS:
                             "Action": [
                                 "lambda:GetAccountSettings",
                                 "lambda:ListFunctions",
-				"lambda:AddPermission",
+				                "lambda:AddPermission",
                                 "lambda:CreateFunction",
                                 "lambda:DeleteFunction",
                                 "lambda:GetFunction",
