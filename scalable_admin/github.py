@@ -184,6 +184,7 @@ def github_authenticate_with_org(organization, access_token, github_object=False
         github = GitHub()
         github.login(token=access_token)
         try:  # Test login
+            print("Organization: ", organization)
             github_organization = github.membership_in(organization).organization
         except GitHubError as exc:
             if exc.code != 401:  # Bad Credentials
