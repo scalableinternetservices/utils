@@ -48,6 +48,8 @@ The file has the following keys that need to be set:
 
 * __github_organization__: Set this value to reflect your github organization.
 
+* __aws_route53_hosted_zone_id__: Set this value to the hosted zone that student project domains can be created in for thier team projects
+
 Below is an example of the contents of the json file:
 
 ```json
@@ -57,7 +59,8 @@ Below is an example of the contents of the json file:
     "aws_iam_group_name": "scalableinternetservices",
     "aws_region": "us-west-2",
     "github_archive_organization": "scalableinternetservicesarchive",
-    "github_organization": "scalableinternetservices"
+    "github_organization": "scalableinternetservices",
+    "aws_route53_hosted_zone_id: "Z01654563IN5XQBD76I8N"
 }
 ```
 

@@ -120,7 +120,52 @@ class AWS:
                                 "ec2:RunInstances"
                             ],
                             "Effect": "Allow",
-                            "Resource": f"arn:aws:ec2:us-west-2:671946291905:key-pair/{team}"
+                            "Resource": f"arn:aws:ec2:{self.config['aws_region']}:{self.config['aws_account_id']}:key-pair/{team}"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "cloudwatch:GetMetricData"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "route53:ListHostedZones",
+                                "route53:ListHostedZonesByName",
+                                "route53:GetHostedZoneCount"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "route53:GetHostedZone",
+                                "route53:ListResourceRecordSets"
+                            ],
+                            "Resource": [
+                                f"arn:aws:route53:::hostedzone/{self.config['aws_route53_hosted_zone_id']}"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "route53:ChangeResourceRecordSets"
+                            ],
+                            "Resource": [
+                                f"arn:aws:route53:::hostedzone/{self.config['aws_route53_hosted_zone_id']}"
+                            ],
+                            "Condition": {
+                                "ForAllValues:StringEquals": {
+                                    "route53:ChangeResourceRecordSetsNormalizedRecordNames": f"{team}.fall25.cs291.com",
+                                    "route53:ChangeResourceRecordSetsRecordTypes": "A"
+                                }
+                            }
                         }
                     ]
                 }
